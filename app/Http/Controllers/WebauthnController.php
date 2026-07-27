@@ -14,86 +14,86 @@ class WebauthnController extends Controller
 {
     public function __construct(private readonly WebauthnService $webauthn) {}
 
-    // --- Segundo factor del login ---------------------------------------
+    // --- Second factor of the login -------------------------------------
 
-    public function challenge(Request $peticion): JsonResponse
+    public function challenge(Request $request): JsonResponse
     {
-        return response()->json($this->webauthn->opcionesDeAsercion($this->semiautenticado($peticion)));
+        return response()->json($this->webauthn->assertionOptions($this->halfAuthenticated($request)));
     }
 
-    public function verify(Request $peticion): JsonResponse
+    public function verify(Request $request): JsonResponse
     {
-        $usuario = $this->semiautenticado($peticion);
+        $user = $this->halfAuthenticated($request);
 
-        abort_unless($peticion->session()->has(WebauthnService::CLAVE_RETO), 403, 'No hay ningún reto pendiente.');
+        abort_unless($request->session()->has(WebauthnService::CHALLENGE_KEY), 403, 'There is no pending challenge.');
 
         abort_unless(
-            $this->webauthn->verificar($usuario, (array) $peticion->input('assertion', [])),
+            $this->webauthn->verify($user, (array) $request->input('assertion', [])),
             422,
-            'La passkey no ha podido verificarse.',
+            'The passkey could not be verified.',
         );
 
-        Auth::login($usuario);
-        $peticion->session()->forget('semiautenticado');
-        $peticion->session()->regenerate();
+        Auth::login($user);
+        $request->session()->forget('half_authenticated');
+        $request->session()->regenerate();
 
-        // La Vault Key viaja envuelta: sin la master password no sirve de nada.
+        // The Vault Key travels wrapped: without the master password it is useless.
         return response()->json([
-            'wrapped_vault_key' => $usuario->wrapped_vault_key,
-            'vault_key_iv' => $usuario->vault_key_iv,
-            'auto_lock_seconds' => $usuario->auto_lock_seconds,
+            'wrapped_vault_key' => $user->wrapped_vault_key,
+            'vault_key_iv' => $user->vault_key_iv,
+            'auto_lock_seconds' => $user->auto_lock_seconds,
         ]);
     }
 
-    // --- Gestión de passkeys de la cuenta -------------------------------
+    // --- Passkey management ---------------------------------------------
 
-    public function index(Request $peticion): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         return response()->json(
-            $peticion->user()->webauthnCredentials()
+            $request->user()->webauthnCredentials()
                 ->get(['id', 'name', 'last_used_at', 'created_at'])
         );
     }
 
-    public function registroChallenge(Request $peticion): JsonResponse
+    public function registrationChallenge(Request $request): JsonResponse
     {
-        return response()->json($this->webauthn->opcionesDeRegistro($peticion->user()));
+        return response()->json($this->webauthn->registrationOptions($request->user()));
     }
 
-    public function store(Request $peticion): Response
+    public function store(Request $request): Response
     {
-        $datos = $peticion->validate([
+        $data = $request->validate([
             'name' => ['required', 'string', 'max:100'],
             'credential' => ['required', 'array'],
         ]);
 
-        $this->webauthn->registrar($peticion->user(), $datos['credential'], $datos['name']);
+        $this->webauthn->register($request->user(), $data['credential'], $data['name']);
 
         return response()->noContent();
     }
 
-    public function destroy(Request $peticion, WebauthnCredential $credencial): Response
+    public function destroy(Request $request, WebauthnCredential $credential): Response
     {
-        abort_unless($credencial->user_id === $peticion->user()->id, 404);
+        abort_unless($credential->user_id === $request->user()->id, 404);
 
-        // Quedarse sin passkeys dejaría la cuenta inaccesible para siempre: no
-        // hay recuperación posible en este sistema.
+        // Running out of passkeys would lock the account forever: this system
+        // has no recovery path.
         abort_if(
-            $peticion->user()->webauthnCredentials()->count() <= 1,
+            $request->user()->webauthnCredentials()->count() <= 1,
             422,
-            'No puedes borrar la última passkey.',
+            'You cannot delete your last passkey.',
         );
 
-        $credencial->delete();
+        $credential->delete();
 
         return response()->noContent();
     }
 
-    private function semiautenticado(Request $peticion): User
+    private function halfAuthenticated(Request $request): User
     {
-        $id = $peticion->session()->get('semiautenticado');
+        $id = $request->session()->get('half_authenticated');
 
-        abort_if($id === null, 403, 'Primero hay que pasar el login.');
+        abort_if($id === null, 403, 'You have to pass the login first.');
 
         return User::findOrFail($id);
     }

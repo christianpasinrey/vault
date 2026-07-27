@@ -1,18 +1,18 @@
-import { encryptBytes, decryptBytes, type Cifrado } from './aes';
+import { encryptBytes, decryptBytes, type Encrypted } from './aes';
 import type { Bytes } from './bytes';
-import type { ItemPlano } from '@/types/item';
+import type { PlainItem } from '@/types/item';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
 /**
- * El item entero viaja dentro del ciphertext: nombre, carpeta, tipo y campos.
- * El servidor no recibe ni un metadato de contenido en claro.
+ * The whole item travels inside the ciphertext: name, folder, type and fields.
+ * The server never receives a single plaintext metadata field.
  */
-export function encryptItem(vaultKey: Bytes, item: ItemPlano): Promise<Cifrado> {
+export function encryptItem(vaultKey: Bytes, item: PlainItem): Promise<Encrypted> {
     return encryptBytes(vaultKey, enc.encode(JSON.stringify(item)));
 }
 
-export async function decryptItem(vaultKey: Bytes, cifrado: Cifrado): Promise<ItemPlano> {
-    return JSON.parse(dec.decode(await decryptBytes(vaultKey, cifrado))) as ItemPlano;
+export async function decryptItem(vaultKey: Bytes, encrypted: Encrypted): Promise<PlainItem> {
+    return JSON.parse(dec.decode(await decryptBytes(vaultKey, encrypted))) as PlainItem;
 }

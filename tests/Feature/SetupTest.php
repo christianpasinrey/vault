@@ -19,14 +19,14 @@ class SetupTest extends TestCase
         $this->token = Str::random(64);
 
         User::create([
-            'email' => 'yo@ejemplo.com',
+            'email' => 'me@example.com',
             'salt' => '', 'auth_hash' => '', 'wrapped_vault_key' => '', 'vault_key_iv' => '',
             'setup_token' => hash('sha256', $this->token),
             'setup_token_expires_at' => now()->addMinutes(15),
         ]);
     }
 
-    private function payload(array $sobrescribir = []): array
+    private function payload(array $overrides = []): array
     {
         return array_merge([
             'token' => $this->token,
@@ -36,19 +36,19 @@ class SetupTest extends TestCase
             'auth_hash' => base64_encode(random_bytes(32)),
             'wrapped_vault_key' => base64_encode(random_bytes(48)),
             'vault_key_iv' => base64_encode(random_bytes(12)),
-        ], $sobrescribir);
+        ], $overrides);
     }
 
-    public function test_completa_la_configuracion_y_quema_el_token(): void
+    public function test_completes_the_setup_and_burns_the_token(): void
     {
         $this->postJson('/api/setup', $this->payload())->assertNoContent();
 
-        $usuario = User::first();
-        $this->assertNotSame('', $usuario->auth_hash);
-        $this->assertNull($usuario->setup_token);
+        $user = User::first();
+        $this->assertNotSame('', $user->auth_hash);
+        $this->assertNull($user->setup_token);
     }
 
-    public function test_guarda_el_auth_hash_hasheado_y_no_en_claro(): void
+    public function test_stores_the_auth_hash_hashed_and_not_in_the_clear(): void
     {
         $payload = $this->payload();
         $this->postJson('/api/setup', $payload)->assertNoContent();
@@ -57,34 +57,34 @@ class SetupTest extends TestCase
         $this->assertStringStartsWith('$argon2id$', User::first()->auth_hash);
     }
 
-    public function test_rechaza_un_token_incorrecto(): void
+    public function test_rejects_a_wrong_token(): void
     {
-        $this->postJson('/api/setup', $this->payload(['token' => 'no-es-el-token']))
+        $this->postJson('/api/setup', $this->payload(['token' => 'not-the-token']))
             ->assertForbidden();
     }
 
-    public function test_rechaza_un_token_caducado(): void
+    public function test_rejects_an_expired_token(): void
     {
         User::first()->update(['setup_token_expires_at' => now()->subMinute()]);
 
         $this->postJson('/api/setup', $this->payload())->assertForbidden();
     }
 
-    public function test_no_permite_configurar_dos_veces(): void
+    public function test_does_not_allow_setting_up_twice(): void
     {
         $this->postJson('/api/setup', $this->payload())->assertNoContent();
         $this->postJson('/api/setup', $this->payload())->assertForbidden();
     }
 
-    public function test_exige_un_minimo_de_iteraciones(): void
+    public function test_requires_a_minimum_iteration_count(): void
     {
         $this->postJson('/api/setup', $this->payload(['kdf_iterations' => 1000]))
             ->assertStatus(422);
     }
 
-    public function test_rechaza_campos_que_no_sean_base64(): void
+    public function test_rejects_fields_that_are_not_base64(): void
     {
-        $this->postJson('/api/setup', $this->payload(['salt' => 'no es base64 !!']))
+        $this->postJson('/api/setup', $this->payload(['salt' => 'not base64 !!']))
             ->assertStatus(422);
     }
 }

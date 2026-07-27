@@ -24,7 +24,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/vault/export', [ItemController::class, 'export']);
 
     Route::get('/account/passkeys', [WebauthnController::class, 'index']);
-    Route::post('/account/passkeys/challenge', [WebauthnController::class, 'registroChallenge']);
+    Route::post('/account/passkeys/challenge', [WebauthnController::class, 'registrationChallenge']);
     Route::post('/account/passkeys', [WebauthnController::class, 'store']);
-    Route::delete('/account/passkeys/{credencial}', [WebauthnController::class, 'destroy']);
+    Route::delete('/account/passkeys/{credential}', [WebauthnController::class, 'destroy']);
 });

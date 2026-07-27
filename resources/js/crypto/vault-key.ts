@@ -1,21 +1,21 @@
-import { encryptBytes, decryptBytes, type Cifrado } from './aes';
+import { encryptBytes, decryptBytes, type Encrypted } from './aes';
 import type { Bytes } from './bytes';
 
 const VAULT_KEY_BYTES = 32;
 
 /**
- * Clave aleatoria que cifra todos los items. Se genera una sola vez, al crear
- * la cuenta, y no cambia nunca: por eso rotar la master password solo re-cifra
- * estos 32 bytes en lugar de la boveda entera.
+ * Random key that encrypts every item. Generated once, when the account is
+ * created, and never changed: that is why rotating the master password only
+ * re-encrypts these 32 bytes instead of the whole vault.
  */
 export function generateVaultKey(): Bytes {
     return crypto.getRandomValues(new Uint8Array(VAULT_KEY_BYTES));
 }
 
-export function wrapVaultKey(wrappingKey: Bytes, vaultKey: Bytes): Promise<Cifrado> {
+export function wrapVaultKey(wrappingKey: Bytes, vaultKey: Bytes): Promise<Encrypted> {
     return encryptBytes(wrappingKey, vaultKey);
 }
 
-export function unwrapVaultKey(wrappingKey: Bytes, envuelta: Cifrado): Promise<Bytes> {
-    return decryptBytes(wrappingKey, envuelta);
+export function unwrapVaultKey(wrappingKey: Bytes, wrapped: Encrypted): Promise<Bytes> {
+    return decryptBytes(wrappingKey, wrapped);
 }

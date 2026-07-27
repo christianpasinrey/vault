@@ -12,8 +12,8 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
     'wrapped_vault_key', 'vault_key_iv', 'auto_lock_seconds',
     'setup_token', 'setup_token_expires_at',
 ])]
-// El auth_hash y el setup_token no deben aparecer en ninguna respuesta,
-// ni siquiera por accidente al serializar el modelo.
+// The auth_hash and the setup_token must never show up in a response, not even
+// by accident when the model is serialized.
 #[Hidden(['auth_hash', 'remember_token', 'setup_token'])]
 class User extends Authenticatable
 {

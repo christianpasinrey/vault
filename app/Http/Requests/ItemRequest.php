@@ -13,19 +13,19 @@ class ItemRequest extends FormRequest
 
     public function rules(): array
     {
-        $reglas = [
+        $rules = [
             'ciphertext' => ['required', 'string', 'base64', 'max:1048576'],
             'iv' => ['required', 'string', 'base64'],
         ];
 
         if ($this->isMethod('POST')) {
-            $reglas['id'] = ['required', 'uuid'];
+            $rules['id'] = ['required', 'uuid'];
         }
 
         if ($this->isMethod('PUT')) {
-            $reglas['version'] = ['required', 'integer', 'min:1'];
+            $rules['version'] = ['required', 'integer', 'min:1'];
         }
 
-        return $reglas;
+        return $rules;
     }
 }

@@ -1,18 +1,18 @@
 import type { Bytes } from './bytes';
 
-/** Conversion entre Uint8Array y base64, sin dependencias externas. */
+/** Conversion between Uint8Array and base64, with no external dependencies. */
 
 export function bytesToBase64(bytes: Uint8Array): string {
-    let binario = '';
-    for (const byte of bytes) binario += String.fromCharCode(byte);
+    let binary = '';
+    for (const byte of bytes) binary += String.fromCharCode(byte);
 
-    return btoa(binario);
+    return btoa(binary);
 }
 
 export function base64ToBytes(b64: string): Bytes {
-    const binario = atob(b64);
-    const bytes = new Uint8Array(binario.length);
-    for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
 
     return bytes;
 }

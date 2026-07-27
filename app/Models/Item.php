@@ -9,10 +9,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
- * Un secreto de la boveda.
+ * A secret stored in the vault.
  *
- * Este modelo no sabe que guarda. El ciphertext contiene un JSON cifrado en el
- * navegador con la Vault Key, que el servidor jamas posee.
+ * This model does not know what it holds. The ciphertext contains JSON that was
+ * encrypted in the browser with the Vault Key, which the server never has.
  */
 #[Fillable(['id', 'user_id', 'ciphertext', 'iv', 'version'])]
 class Item extends Model

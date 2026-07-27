@@ -12,85 +12,85 @@ class LoginTest extends TestCase
 {
     use RefreshDatabase;
 
-    private string $authHash = 'YXV0aC1oYXNoLWRlLXBydWViYQ==';
+    private string $authHash = 'YXV0aC1oYXNoLWZvci10ZXN0cw==';
 
     protected function setUp(): void
     {
         parent::setUp();
-        RateLimiter::clear('login:yo@ejemplo.com');
+        RateLimiter::clear('login:me@example.com');
 
         User::create([
-            'email' => 'yo@ejemplo.com',
-            'salt' => 'c2FsdC1kZS1wcnVlYmE=',
+            'email' => 'me@example.com',
+            'salt' => 'dGVzdC1zYWx0',
             'kdf_algo' => 'pbkdf2-sha256',
             'kdf_iterations' => 600000,
             'auth_hash' => Hash::make($this->authHash),
-            'wrapped_vault_key' => 'ZW52dWVsdGE=',
+            'wrapped_vault_key' => 'd3JhcHBlZA==',
             'vault_key_iv' => 'aXY=',
         ]);
     }
 
-    public function test_prelogin_devuelve_los_parametros_kdf(): void
+    public function test_prelogin_returns_the_kdf_parameters(): void
     {
-        $this->postJson('/api/auth/prelogin', ['email' => 'yo@ejemplo.com'])
+        $this->postJson('/api/auth/prelogin', ['email' => 'me@example.com'])
             ->assertOk()
             ->assertJson([
-                'salt' => 'c2FsdC1kZS1wcnVlYmE=',
+                'salt' => 'dGVzdC1zYWx0',
                 'kdf_algo' => 'pbkdf2-sha256',
                 'kdf_iterations' => 600000,
             ]);
     }
 
-    public function test_prelogin_nunca_expone_el_auth_hash_ni_la_vault_key(): void
+    public function test_prelogin_never_exposes_the_auth_hash_or_the_vault_key(): void
     {
-        $respuesta = $this->postJson('/api/auth/prelogin', ['email' => 'yo@ejemplo.com']);
+        $response = $this->postJson('/api/auth/prelogin', ['email' => 'me@example.com']);
 
-        $respuesta->assertJsonMissingPath('auth_hash');
-        $respuesta->assertJsonMissingPath('wrapped_vault_key');
+        $response->assertJsonMissingPath('auth_hash');
+        $response->assertJsonMissingPath('wrapped_vault_key');
     }
 
-    public function test_login_acepta_el_auth_hash_correcto(): void
+    public function test_login_accepts_the_correct_auth_hash(): void
     {
         $this->postJson('/api/auth/login', [
-            'email' => 'yo@ejemplo.com',
+            'email' => 'me@example.com',
             'auth_hash' => $this->authHash,
         ])->assertOk()->assertJson(['webauthn_required' => true]);
     }
 
-    public function test_login_no_entrega_la_vault_key_antes_de_la_passkey(): void
+    public function test_login_does_not_hand_over_the_vault_key_before_the_passkey(): void
     {
         $this->postJson('/api/auth/login', [
-            'email' => 'yo@ejemplo.com',
+            'email' => 'me@example.com',
             'auth_hash' => $this->authHash,
         ])->assertJsonMissingPath('wrapped_vault_key');
     }
 
-    public function test_login_rechaza_un_auth_hash_incorrecto(): void
+    public function test_login_rejects_an_incorrect_auth_hash(): void
     {
         $this->postJson('/api/auth/login', [
-            'email' => 'yo@ejemplo.com',
-            'auth_hash' => 'aW5jb3JyZWN0bw==',
+            'email' => 'me@example.com',
+            'auth_hash' => 'aW5jb3JyZWN0',
         ])->assertStatus(422);
     }
 
-    public function test_login_bloquea_tras_intentos_repetidos(): void
+    public function test_login_locks_out_after_repeated_attempts(): void
     {
         for ($i = 0; $i < 5; $i++) {
             $this->postJson('/api/auth/login', [
-                'email' => 'yo@ejemplo.com',
-                'auth_hash' => 'aW5jb3JyZWN0bw==',
+                'email' => 'me@example.com',
+                'auth_hash' => 'aW5jb3JyZWN0',
             ]);
         }
 
         $this->postJson('/api/auth/login', [
-            'email' => 'yo@ejemplo.com',
+            'email' => 'me@example.com',
             'auth_hash' => $this->authHash,
         ])->assertStatus(429);
     }
 
-    public function test_un_email_desconocido_no_revela_que_no_existe(): void
+    public function test_an_unknown_email_does_not_reveal_that_it_does_not_exist(): void
     {
-        $this->postJson('/api/auth/prelogin', ['email' => 'otro@ejemplo.com'])
+        $this->postJson('/api/auth/prelogin', ['email' => 'other@example.com'])
             ->assertOk()
             ->assertJsonStructure(['salt', 'kdf_algo', 'kdf_iterations']);
     }

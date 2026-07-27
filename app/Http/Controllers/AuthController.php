@@ -11,65 +11,66 @@ use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
-    public function prelogin(Request $peticion): JsonResponse
+    public function prelogin(Request $request): JsonResponse
     {
-        $datos = $peticion->validate(['email' => ['required', 'email']]);
+        $data = $request->validate(['email' => ['required', 'email']]);
 
-        $usuario = User::firstWhere('email', $datos['email']);
+        $user = User::firstWhere('email', $data['email']);
 
-        // Un correo desconocido recibe un salt falso pero estable, derivado con
-        // HMAC de APP_KEY: la respuesta no delata si la cuenta existe ni cambia
-        // entre peticiones, que sería igual de revelador.
-        if ($usuario === null) {
+        // An unknown address gets a fake but stable salt, derived with an HMAC
+        // of APP_KEY: the response neither reveals whether the account exists
+        // nor changes between requests, which would be just as revealing.
+        if ($user === null) {
             return response()->json([
-                'salt' => base64_encode(substr(hash_hmac('sha256', $datos['email'], config('app.key'), true), 0, 16)),
+                'salt' => base64_encode(substr(hash_hmac('sha256', $data['email'], config('app.key'), true), 0, 16)),
                 'kdf_algo' => 'pbkdf2-sha256',
                 'kdf_iterations' => 600000,
             ]);
         }
 
         return response()->json([
-            'salt' => $usuario->salt,
-            'kdf_algo' => $usuario->kdf_algo,
-            'kdf_iterations' => $usuario->kdf_iterations,
+            'salt' => $user->salt,
+            'kdf_algo' => $user->kdf_algo,
+            'kdf_iterations' => $user->kdf_iterations,
         ]);
     }
 
-    public function login(Request $peticion): JsonResponse
+    public function login(Request $request): JsonResponse
     {
-        $datos = $peticion->validate([
+        $data = $request->validate([
             'email' => ['required', 'email'],
             'auth_hash' => ['required', 'string'],
         ]);
 
-        $clave = 'login:'.$datos['email'];
+        $key = 'login:'.$data['email'];
 
-        if (RateLimiter::tooManyAttempts($clave, 5)) {
-            abort(429, 'Demasiados intentos. Espera '.RateLimiter::availableIn($clave).' segundos.');
+        if (RateLimiter::tooManyAttempts($key, 5)) {
+            abort(429, 'Too many attempts. Try again in '.RateLimiter::availableIn($key).' seconds.');
         }
 
-        $usuario = User::firstWhere('email', $datos['email']);
+        $user = User::firstWhere('email', $data['email']);
 
-        if ($usuario === null || ! Hash::check($datos['auth_hash'], $usuario->auth_hash)) {
-            RateLimiter::hit($clave, 300);
+        if ($user === null || ! Hash::check($data['auth_hash'], $user->auth_hash)) {
+            RateLimiter::hit($key, 300);
 
             throw ValidationException::withMessages([
-                'auth_hash' => 'Credenciales incorrectas.',
+                'auth_hash' => 'Invalid credentials.',
             ]);
         }
 
-        RateLimiter::clear($clave);
+        RateLimiter::clear($key);
 
-        // Semiautenticado: falta la passkey antes de entregar la Vault Key envuelta.
-        $peticion->session()->put('semiautenticado', $usuario->id);
+        // Half-authenticated: the passkey is still required before the wrapped
+        // Vault Key is handed over.
+        $request->session()->put('half_authenticated', $user->id);
 
         return response()->json(['webauthn_required' => true]);
     }
 
-    public function logout(Request $peticion): JsonResponse
+    public function logout(Request $request): JsonResponse
     {
-        $peticion->session()->flush();
-        $peticion->session()->regenerate();
+        $request->session()->flush();
+        $request->session()->regenerate();
 
         return response()->json(['ok' => true]);
     }

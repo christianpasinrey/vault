@@ -12,12 +12,12 @@ return new class extends Migration
             $table->uuid('id')->primary();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
 
-            // Todo el contenido vive aqui dentro, cifrado: nombre, carpeta, tipo
-            // y campos. El servidor no entiende nada de lo que almacena.
+            // Everything lives in here, encrypted: name, folder, type and fields.
+            // The server understands nothing of what it stores.
             $table->longText('ciphertext');
             $table->string('iv');
 
-            // Concurrencia optimista entre dispositivos.
+            // Optimistic concurrency across devices.
             $table->unsignedInteger('version')->default(1);
 
             $table->softDeletes();

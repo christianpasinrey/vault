@@ -12,19 +12,19 @@ return new class extends Migration
             $table->id();
             $table->string('email')->unique();
 
-            // Material criptografico. Nada de esto permite descifrar por si solo:
-            // el auth_hash es una credencial de acceso y la Vault Key llega
-            // envuelta con una clave que solo existe en el navegador.
+            // Cryptographic material. None of this decrypts anything on its own:
+            // auth_hash is an access credential, and the Vault Key arrives
+            // wrapped with a key that only ever exists in the browser.
             $table->string('salt');                    // base64, 16 bytes
             $table->string('kdf_algo')->default('pbkdf2-sha256');
             $table->unsignedInteger('kdf_iterations')->default(600000);
-            $table->string('auth_hash');               // Argon2id del auth hash recibido
+            $table->string('auth_hash');               // Argon2id of the received auth hash
             $table->text('wrapped_vault_key');
             $table->string('vault_key_iv');
 
             $table->unsignedInteger('auto_lock_seconds')->default(300);
 
-            // Bootstrap de un solo uso. No existe registro publico.
+            // Single-use bootstrap. There is no public sign-up.
             $table->string('setup_token')->nullable();
             $table->timestamp('setup_token_expires_at')->nullable();
 
@@ -32,8 +32,7 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        // No hay tabla de reseteo de contrasena: en este sistema no existe
-        // recuperacion posible, por diseno.
+        // No password reset table: by design, this system offers no recovery.
 
         Schema::create('sessions', function (Blueprint $table) {
             $table->string('id')->primary();

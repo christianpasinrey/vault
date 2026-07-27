@@ -1,9 +1,9 @@
 import { defineConfig } from 'vitest/config';
 import { fileURLToPath, URL } from 'node:url';
 
-// El entorno es 'node' a proposito: Node 24 expone WebCrypto de forma nativa en
-// globalThis.crypto, que es la misma API que usa el navegador. Asi probamos la
-// criptografia real en lugar de un mock.
+// The 'node' environment is deliberate: Node 24 exposes WebCrypto natively on
+// globalThis.crypto, the very same API the browser uses. That way we exercise
+// the real cryptography instead of a mock.
 export default defineConfig({
     test: {
         environment: 'node',

@@ -9,28 +9,29 @@ use Illuminate\Support\Facades\Hash;
 
 class SetupController extends Controller
 {
-    public function store(SetupRequest $peticion): Response
+    public function store(SetupRequest $request): Response
     {
-        $usuario = User::first();
+        $user = User::first();
 
-        abort_if($usuario === null, 403);
-        abort_if($usuario->setup_token === null, 403, 'La cuenta ya está configurada.');
-        abort_if($usuario->setup_token_expires_at?->isPast() ?? true, 403, 'El enlace ha caducado.');
+        abort_if($user === null, 403);
+        abort_if($user->setup_token === null, 403, 'The account is already set up.');
+        abort_if($user->setup_token_expires_at?->isPast() ?? true, 403, 'The link has expired.');
 
         abort_unless(
-            hash_equals($usuario->setup_token, hash('sha256', $peticion->string('token')->toString())),
+            hash_equals($user->setup_token, hash('sha256', $request->string('token')->toString())),
             403,
         );
 
-        $usuario->update([
-            'salt' => $peticion->string('salt')->toString(),
-            'kdf_algo' => $peticion->string('kdf_algo')->toString(),
-            'kdf_iterations' => $peticion->integer('kdf_iterations'),
-            // El auth hash llega derivado del cliente; aquí se vuelve a hashear
-            // para que un volcado de la base de datos no entregue una credencial usable.
-            'auth_hash' => Hash::make($peticion->string('auth_hash')->toString()),
-            'wrapped_vault_key' => $peticion->string('wrapped_vault_key')->toString(),
-            'vault_key_iv' => $peticion->string('vault_key_iv')->toString(),
+        $user->update([
+            'salt' => $request->string('salt')->toString(),
+            'kdf_algo' => $request->string('kdf_algo')->toString(),
+            'kdf_iterations' => $request->integer('kdf_iterations'),
+            // The auth hash arrives already derived by the client; it is hashed
+            // again here so that a database dump does not hand over a usable
+            // credential.
+            'auth_hash' => Hash::make($request->string('auth_hash')->toString()),
+            'wrapped_vault_key' => $request->string('wrapped_vault_key')->toString(),
+            'vault_key_iv' => $request->string('vault_key_iv')->toString(),
             'setup_token' => null,
             'setup_token_expires_at' => null,
         ]);

@@ -29,35 +29,36 @@ use Webauthn\PublicKeyCredentialSource;
 use Webauthn\PublicKeyCredentialUserEntity;
 
 /**
- * Segundo factor obligatorio.
+ * Mandatory second factor.
  *
- * La passkey no cifra nada: solo decide si el servidor entrega la Vault Key
- * envuelta. Sin la master password esa clave sigue siendo un blob inútil, así
- * que un fallo aquí no compromete el contenido de la bóveda, solo su acceso.
+ * The passkey encrypts nothing: it only decides whether the server hands over
+ * the wrapped Vault Key. Without the master password that key is still an
+ * unusable blob, so a failure here compromises access to the vault, never its
+ * contents.
  */
 class WebauthnService
 {
-    /** El reto vive en sesión y se consume en el primer intento, válido o no. */
-    public const CLAVE_RETO = 'webauthn_challenge';
+    /** The challenge lives in the session and is consumed on the first attempt, valid or not. */
+    public const CHALLENGE_KEY = 'webauthn_challenge';
 
-    private const RETO_BYTES = 32;
+    private const CHALLENGE_BYTES = 32;
 
-    private SerializerInterface $serializador;
+    private SerializerInterface $serializer;
 
     public function __construct()
     {
-        $this->serializador = (new WebauthnSerializerFactory(
-            AttestationStatementSupportManager::create([new NoneAttestationStatementSupport()])
+        $this->serializer = (new WebauthnSerializerFactory(
+            AttestationStatementSupportManager::create([new NoneAttestationStatementSupport])
         ))->create();
     }
 
-    /** Opciones para registrar una passkey nueva. Guarda el reto en sesión. */
-    public function opcionesDeRegistro(User $usuario): array
+    /** Options for registering a new passkey. Stores the challenge in the session. */
+    public function registrationOptions(User $user): array
     {
-        $opciones = PublicKeyCredentialCreationOptions::create(
-            rp: $this->entidadDelServidor(),
-            user: $this->entidadDelUsuario($usuario),
-            challenge: random_bytes(self::RETO_BYTES),
+        $options = PublicKeyCredentialCreationOptions::create(
+            rp: $this->relyingParty(),
+            user: $this->userEntity($user),
+            challenge: random_bytes(self::CHALLENGE_BYTES),
             pubKeyCredParams: [
                 PublicKeyCredentialParameters::createPk(Algorithms::COSE_ALGORITHM_ES256),
                 PublicKeyCredentialParameters::createPk(Algorithms::COSE_ALGORITHM_RS256),
@@ -66,120 +67,127 @@ class WebauthnService
                 userVerification: AuthenticatorSelectionCriteria::USER_VERIFICATION_REQUIREMENT_REQUIRED,
                 residentKey: AuthenticatorSelectionCriteria::RESIDENT_KEY_REQUIREMENT_PREFERRED,
             ),
-            // Impide registrar dos veces el mismo autenticador.
-            excludeCredentials: $this->descriptores($usuario),
+            // Stops the same authenticator being registered twice.
+            excludeCredentials: $this->descriptors($user),
         );
 
-        return $this->guardarReto($opciones);
+        return $this->storeChallenge($options);
     }
 
-    /** Valida la respuesta del navegador y persiste la credencial. */
-    public function registrar(User $usuario, array $credencial, string $nombre): void
+    /** Validates the browser response and persists the credential. */
+    public function register(User $user, array $credential, string $name): void
     {
-        $opciones = $this->recuperarReto(PublicKeyCredentialCreationOptions::class);
+        $options = $this->pullChallenge(PublicKeyCredentialCreationOptions::class);
 
-        $respuesta = $this->respuestaDelNavegador($credencial);
-        abort_unless($respuesta instanceof AuthenticatorAttestationResponse, 422, 'La respuesta no es un registro.');
+        $response = $this->browserResponse($credential);
+        abort_unless($response instanceof AuthenticatorAttestationResponse, 422, 'That is not a registration response.');
 
-        $registro = AuthenticatorAttestationResponseValidator::create($this->ceremonias()->creationCeremony())
-            ->check($respuesta, $opciones, $this->idDelServidor());
+        $record = AuthenticatorAttestationResponseValidator::create($this->ceremonies()->creationCeremony())
+            ->check($response, $options, $this->relyingPartyId());
 
         WebauthnCredential::create([
-            'user_id' => $usuario->id,
-            'credential_id' => Base64UrlSafe::encodeUnpadded($registro->publicKeyCredentialId),
-            'public_key' => $this->serializador->serialize(
-                PublicKeyCredentialSource::fromCredentialRecord($registro), 'json'
+            'user_id' => $user->id,
+            'credential_id' => Base64UrlSafe::encodeUnpadded($record->publicKeyCredentialId),
+            'public_key' => $this->serializer->serialize(
+                PublicKeyCredentialSource::fromCredentialRecord($record), 'json'
             ),
-            'sign_count' => $registro->counter,
-            'name' => $nombre,
+            'sign_count' => $record->counter,
+            'name' => $name,
         ]);
     }
 
-    /** Opciones de aserción para iniciar sesión. Guarda el reto en sesión. */
-    public function opcionesDeAsercion(User $usuario): array
+    /** Assertion options for signing in. Stores the challenge in the session. */
+    public function assertionOptions(User $user): array
     {
-        return $this->guardarReto(PublicKeyCredentialRequestOptions::create(
-            challenge: random_bytes(self::RETO_BYTES),
-            rpId: $this->idDelServidor(),
-            allowCredentials: $this->descriptores($usuario),
+        return $this->storeChallenge(PublicKeyCredentialRequestOptions::create(
+            challenge: random_bytes(self::CHALLENGE_BYTES),
+            rpId: $this->relyingPartyId(),
+            allowCredentials: $this->descriptors($user),
             userVerification: PublicKeyCredentialRequestOptions::USER_VERIFICATION_REQUIREMENT_REQUIRED,
         ));
     }
 
-    /** Valida la aserción; devuelve true y actualiza sign_count si es correcta. */
-    public function verificar(User $usuario, array $asercion): bool
+    /** Validates the assertion; returns true and updates sign_count when it checks out. */
+    public function verify(User $user, array $assertion): bool
     {
-        $opciones = $this->recuperarReto(PublicKeyCredentialRequestOptions::class);
+        $options = $this->pullChallenge(PublicKeyCredentialRequestOptions::class);
 
         try {
-            $credencial = $this->serializador->deserialize(
-                json_encode($asercion, JSON_THROW_ON_ERROR), PublicKeyCredential::class, 'json'
+            $credential = $this->serializer->deserialize(
+                json_encode($assertion, JSON_THROW_ON_ERROR), PublicKeyCredential::class, 'json'
             );
 
-            $respuesta = $credencial->response;
+            $response = $credential->response;
 
-            if (! $respuesta instanceof AuthenticatorAssertionResponse) {
+            if (! $response instanceof AuthenticatorAssertionResponse) {
                 return false;
             }
 
-            $fila = $usuario->webauthnCredentials()
-                ->where('credential_id', Base64UrlSafe::encodeUnpadded($credencial->rawId))
+            $row = $user->webauthnCredentials()
+                ->where('credential_id', Base64UrlSafe::encodeUnpadded($credential->rawId))
                 ->first();
 
-            if ($fila === null) {
+            if ($row === null) {
                 return false;
             }
 
-            $registro = $this->serializador->deserialize(
-                $fila->public_key, PublicKeyCredentialSource::class, 'json'
+            $record = $this->serializer->deserialize(
+                $row->public_key, PublicKeyCredentialSource::class, 'json'
             );
 
-            $actualizado = AuthenticatorAssertionResponseValidator::create($this->ceremonias()->requestCeremony())
-                ->check($registro, $respuesta, $opciones, $this->idDelServidor(), (string) $usuario->id);
+            $updated = AuthenticatorAssertionResponseValidator::create($this->ceremonies()->requestCeremony())
+                ->check($record, $response, $options, $this->relyingPartyId(), (string) $user->id);
 
-            $fila->update([
-                'public_key' => $this->serializador->serialize(
-                    PublicKeyCredentialSource::fromCredentialRecord($actualizado), 'json'
+            $row->update([
+                'public_key' => $this->serializer->serialize(
+                    PublicKeyCredentialSource::fromCredentialRecord($updated), 'json'
                 ),
-                'sign_count' => $actualizado->counter,
+                'sign_count' => $updated->counter,
                 'last_used_at' => now(),
             ]);
 
             return true;
         } catch (Throwable) {
-            // Cualquier fallo de la ceremonia es indistinguible de una firma
-            // inválida: no damos pistas sobre en qué paso concreto falló.
+            // Any ceremony failure is indistinguishable from an invalid
+            // signature: we give no hint about which step actually failed.
             return false;
         }
     }
 
-    private function ceremonias(): CeremonyStepManagerFactory
+    private function browserResponse(array $credential): mixed
     {
-        $fabrica = new CeremonyStepManagerFactory();
-        $fabrica->setAllowedOrigins([rtrim((string) config('app.url'), '/')]);
-
-        return $fabrica;
+        return $this->serializer->deserialize(
+            json_encode($credential, JSON_THROW_ON_ERROR), PublicKeyCredential::class, 'json'
+        )->response;
     }
 
-    private function idDelServidor(): string
+    private function ceremonies(): CeremonyStepManagerFactory
+    {
+        $factory = new CeremonyStepManagerFactory;
+        $factory->setAllowedOrigins([rtrim((string) config('app.url'), '/')]);
+
+        return $factory;
+    }
+
+    private function relyingPartyId(): string
     {
         return parse_url((string) config('app.url'), PHP_URL_HOST) ?: 'localhost';
     }
 
-    private function entidadDelServidor(): PublicKeyCredentialRpEntity
+    private function relyingParty(): PublicKeyCredentialRpEntity
     {
-        return PublicKeyCredentialRpEntity::create((string) config('app.name'), $this->idDelServidor());
+        return PublicKeyCredentialRpEntity::create((string) config('app.name'), $this->relyingPartyId());
     }
 
-    private function entidadDelUsuario(User $usuario): PublicKeyCredentialUserEntity
+    private function userEntity(User $user): PublicKeyCredentialUserEntity
     {
-        return PublicKeyCredentialUserEntity::create($usuario->email, (string) $usuario->id, $usuario->email);
+        return PublicKeyCredentialUserEntity::create($user->email, (string) $user->id, $user->email);
     }
 
     /** @return PublicKeyCredentialDescriptor[] */
-    private function descriptores(User $usuario): array
+    private function descriptors(User $user): array
     {
-        return $usuario->webauthnCredentials
+        return $user->webauthnCredentials
             ->map(fn (WebauthnCredential $c) => PublicKeyCredentialDescriptor::create(
                 PublicKeyCredentialDescriptor::CREDENTIAL_TYPE_PUBLIC_KEY,
                 Base64UrlSafe::decodeNoPadding($c->credential_id),
@@ -188,29 +196,29 @@ class WebauthnService
     }
 
     /**
-     * Guarda las opciones serializadas en sesión y devuelve su forma JSON, para
-     * que la verificación posterior use exactamente el mismo objeto que se envió.
+     * Stores the serialized options in the session and returns their JSON form,
+     * so that verification later works against exactly the object that was sent.
      */
-    private function guardarReto(object $opciones): array
+    private function storeChallenge(object $options): array
     {
-        $json = $this->serializador->serialize($opciones, 'json', [
+        $json = $this->serializer->serialize($options, 'json', [
             AbstractObjectNormalizer::SKIP_NULL_VALUES => true,
         ]);
 
-        Session::put(self::CLAVE_RETO, $json);
+        Session::put(self::CHALLENGE_KEY, $json);
 
         return json_decode($json, true, 512, JSON_THROW_ON_ERROR);
     }
 
     /** @template T of object
-     *  @param  class-string<T>  $tipo
+     *  @param  class-string<T>  $type
      *  @return T */
-    private function recuperarReto(string $tipo): object
+    private function pullChallenge(string $type): object
     {
-        $json = Session::pull(self::CLAVE_RETO);
+        $json = Session::pull(self::CHALLENGE_KEY);
 
-        abort_if($json === null, 403, 'No hay ningún reto pendiente.');
+        abort_if($json === null, 403, 'There is no pending challenge.');
 
-        return $this->serializador->deserialize($json, $tipo, 'json');
+        return $this->serializer->deserialize($json, $type, 'json');
     }
 }

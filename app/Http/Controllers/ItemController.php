@@ -9,43 +9,43 @@ use Illuminate\Http\Response;
 
 class ItemController extends Controller
 {
-    public function index(Request $peticion): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         return response()->json([
-            'items' => $peticion->user()->items()->withTrashed()->get(),
+            'items' => $request->user()->items()->withTrashed()->get(),
         ]);
     }
 
-    public function store(ItemRequest $peticion): JsonResponse
+    public function store(ItemRequest $request): JsonResponse
     {
-        $item = $peticion->user()->items()->create([
-            'id' => $peticion->string('id')->toString(),
-            'ciphertext' => $peticion->string('ciphertext')->toString(),
-            'iv' => $peticion->string('iv')->toString(),
+        $item = $request->user()->items()->create([
+            'id' => $request->string('id')->toString(),
+            'ciphertext' => $request->string('ciphertext')->toString(),
+            'iv' => $request->string('iv')->toString(),
             'version' => 1,
         ]);
 
         return response()->json($item, 201);
     }
 
-    public function update(ItemRequest $peticion, string $id): JsonResponse
+    public function update(ItemRequest $request, string $id): JsonResponse
     {
-        $item = $peticion->user()->items()->withTrashed()->findOrFail($id);
+        $item = $request->user()->items()->withTrashed()->findOrFail($id);
 
-        // Concurrencia optimista: si otro dispositivo escribió antes, no pisamos nada.
-        $afectadas = $peticion->user()->items()
+        // Optimistic concurrency: if another device wrote first, overwrite nothing.
+        $affected = $request->user()->items()
             ->whereKey($id)
-            ->where('version', $peticion->integer('version'))
+            ->where('version', $request->integer('version'))
             ->update([
-                'ciphertext' => $peticion->string('ciphertext')->toString(),
-                'iv' => $peticion->string('iv')->toString(),
-                'version' => $peticion->integer('version') + 1,
+                'ciphertext' => $request->string('ciphertext')->toString(),
+                'iv' => $request->string('iv')->toString(),
+                'version' => $request->integer('version') + 1,
                 'updated_at' => now(),
             ]);
 
-        if ($afectadas === 0) {
+        if ($affected === 0) {
             return response()->json([
-                'message' => 'El ítem cambió desde otro dispositivo.',
+                'message' => 'The item changed on another device.',
                 'item' => $item->fresh(),
             ], 409);
         }
@@ -53,27 +53,27 @@ class ItemController extends Controller
         return response()->json($item->fresh());
     }
 
-    public function destroy(Request $peticion, string $id): Response
+    public function destroy(Request $request, string $id): Response
     {
-        $peticion->user()->items()->findOrFail($id)->delete();
+        $request->user()->items()->findOrFail($id)->delete();
 
         return response()->noContent();
     }
 
-    public function restore(Request $peticion, string $id): JsonResponse
+    public function restore(Request $request, string $id): JsonResponse
     {
-        $item = $peticion->user()->items()->onlyTrashed()->findOrFail($id);
+        $item = $request->user()->items()->onlyTrashed()->findOrFail($id);
         $item->restore();
 
         return response()->json($item->fresh());
     }
 
-    public function export(Request $peticion): JsonResponse
+    public function export(Request $request): JsonResponse
     {
         return response()->json([
-            'formato' => 'vault-export-v1',
-            'exportado_en' => now()->toIso8601String(),
-            'items' => $peticion->user()->items()->withTrashed()->get(),
+            'format' => 'vault-export-v1',
+            'exported_at' => now()->toIso8601String(),
+            'items' => $request->user()->items()->withTrashed()->get(),
         ]);
     }
 }

@@ -1,11 +1,12 @@
 import type { Bytes } from './bytes';
 
 /**
- * Derivacion de claves a partir de la master password.
+ * Key derivation from the master password.
  *
- * La master key nunca sale de aqui sin pasar por HKDF: el auth hash que viaja
- * al servidor y la wrapping key que descifra la Vault Key son subclaves
- * computacionalmente independientes. Conocer una no ayuda a obtener la otra.
+ * The master key never leaves this module without going through HKDF: the auth
+ * hash that travels to the server and the wrapping key that decrypts the Vault
+ * Key are computationally independent subkeys. Knowing one does not help you
+ * obtain the other.
  */
 
 export const DEFAULT_ITERATIONS = 600000;
@@ -38,7 +39,7 @@ export async function deriveMasterKey(password: string, params: KdfParams): Prom
     return new Uint8Array(bits);
 }
 
-async function derivarSubclave(masterKey: Bytes, info: string): Promise<Bytes> {
+async function deriveSubkey(masterKey: Bytes, info: string): Promise<Bytes> {
     const base = await crypto.subtle.importKey('raw', masterKey, 'HKDF', false, ['deriveBits']);
 
     const bits = await crypto.subtle.deriveBits(
@@ -50,12 +51,12 @@ async function derivarSubclave(masterKey: Bytes, info: string): Promise<Bytes> {
     return new Uint8Array(bits);
 }
 
-/** Credencial que se envia al servidor. Inutil para descifrar. */
+/** Credential sent to the server. Useless for decryption. */
 export function deriveAuthHash(masterKey: Bytes): Promise<Bytes> {
-    return derivarSubclave(masterKey, INFO_AUTH);
+    return deriveSubkey(masterKey, INFO_AUTH);
 }
 
-/** Clave que envuelve y desenvuelve la Vault Key. Jamas abandona el navegador. */
+/** Key that wraps and unwraps the Vault Key. Never leaves the browser. */
 export function deriveWrappingKey(masterKey: Bytes): Promise<Bytes> {
-    return derivarSubclave(masterKey, INFO_WRAP);
+    return deriveSubkey(masterKey, INFO_WRAP);
 }

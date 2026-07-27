@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { encryptItem, decryptItem } from './item-crypto';
 import { generateVaultKey } from './vault-key';
-import type { ItemPlano } from '@/types/item';
+import type { PlainItem } from '@/types/item';
 
-const login: ItemPlano = {
+const login: PlainItem = {
     type: 'login',
     name: 'GitHub',
     folder: 'dev',
@@ -11,28 +11,28 @@ const login: ItemPlano = {
     fields: { url: 'https://github.com', username: 'chris', password: 'p4ss w0rd n', notes: '' },
 };
 
-describe('cifrado de items', () => {
-    it('descifra exactamente el item que cifro', async () => {
+describe('item encryption', () => {
+    it('decrypts exactly the item it encrypted', async () => {
         const vk = generateVaultKey();
         expect(await decryptItem(vk, await encryptItem(vk, login))).toEqual(login);
     });
 
-    it('conserva texto largo multilinea sin alterarlo', async () => {
+    it('preserves long multiline text unaltered', async () => {
         const vk = generateVaultKey();
-        const contenido = '-----BEGIN PRIVATE KEY-----\nlinea1\nlinea2\n\n-----END PRIVATE KEY-----\n';
+        const content = '-----BEGIN PRIVATE KEY-----\nline1\nline2\n\n-----END PRIVATE KEY-----\n';
 
-        const item: ItemPlano = {
+        const item: PlainItem = {
             type: 'secure_text',
             name: 'SSH prod',
             folder: 'infra',
             favorite: false,
-            fields: { content: contenido, notes: '' },
+            fields: { content, notes: '' },
         };
 
-        expect((await decryptItem(vk, await encryptItem(vk, item))).fields.content).toBe(contenido);
+        expect((await decryptItem(vk, await encryptItem(vk, item))).fields.content).toBe(content);
     });
 
-    it('no deja el nombre ni el tipo legibles en el ciphertext', async () => {
+    it('leaves neither the name nor the type readable in the ciphertext', async () => {
         const vk = generateVaultKey();
         const { ciphertext } = await encryptItem(vk, login);
 
@@ -41,17 +41,17 @@ describe('cifrado de items', () => {
         expect(atob(ciphertext)).not.toContain('GitHub');
     });
 
-    it('falla al descifrar con otra Vault Key', async () => {
-        const cifrado = await encryptItem(generateVaultKey(), login);
+    it('fails to decrypt with a different Vault Key', async () => {
+        const encrypted = await encryptItem(generateVaultKey(), login);
 
-        await expect(decryptItem(generateVaultKey(), cifrado)).rejects.toThrow();
+        await expect(decryptItem(generateVaultKey(), encrypted)).rejects.toThrow();
     });
 
-    it('falla si el ciphertext ha sido manipulado', async () => {
+    it('fails when the ciphertext has been tampered with', async () => {
         const vk = generateVaultKey();
-        const cifrado = await encryptItem(vk, login);
-        const roto = cifrado.ciphertext.slice(0, -8) + 'AAAAAAAA';
+        const encrypted = await encryptItem(vk, login);
+        const broken = encrypted.ciphertext.slice(0, -8) + 'AAAAAAAA';
 
-        await expect(decryptItem(vk, { ...cifrado, ciphertext: roto })).rejects.toThrow();
+        await expect(decryptItem(vk, { ...encrypted, ciphertext: broken })).rejects.toThrow();
     });
 });
