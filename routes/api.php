@@ -17,6 +17,11 @@ Route::post('/auth/webauthn/verify', [WebauthnController::class, 'verify'])->mid
 
 Route::middleware('auth')->group(function () {
     Route::get('/vault/items', [ItemController::class, 'index']);
+    Route::post('/vault/items', [ItemController::class, 'store']);
+    Route::put('/vault/items/{id}', [ItemController::class, 'update']);
+    Route::delete('/vault/items/{id}', [ItemController::class, 'destroy']);
+    Route::post('/vault/items/{id}/restore', [ItemController::class, 'restore']);
+    Route::get('/vault/export', [ItemController::class, 'export']);
 
     Route::get('/account/passkeys', [WebauthnController::class, 'index']);
     Route::post('/account/passkeys/challenge', [WebauthnController::class, 'registroChallenge']);
