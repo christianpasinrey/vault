@@ -2,31 +2,42 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Notifications\Notifiable;
 
-#[Fillable(['name', 'email', 'password'])]
-#[Hidden(['password', 'remember_token'])]
+#[Fillable([
+    'email', 'salt', 'kdf_algo', 'kdf_iterations', 'auth_hash',
+    'wrapped_vault_key', 'vault_key_iv', 'auto_lock_seconds',
+    'setup_token', 'setup_token_expires_at',
+])]
+// El auth_hash y el setup_token no deben aparecer en ninguna respuesta,
+// ni siquiera por accidente al serializar el modelo.
+#[Hidden(['auth_hash', 'remember_token', 'setup_token'])]
 class User extends Authenticatable
 {
-    /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable;
-
     /**
-     * Get the attributes that should be cast.
-     *
      * @return array<string, string>
      */
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
+            'kdf_iterations' => 'integer',
+            'auto_lock_seconds' => 'integer',
+            'setup_token_expires_at' => 'datetime',
         ];
+    }
+
+    /** @return HasMany<WebauthnCredential, $this> */
+    public function webauthnCredentials(): HasMany
+    {
+        return $this->hasMany(WebauthnCredential::class);
+    }
+
+    /** @return HasMany<Item, $this> */
+    public function items(): HasMany
+    {
+        return $this->hasMany(Item::class);
     }
 }

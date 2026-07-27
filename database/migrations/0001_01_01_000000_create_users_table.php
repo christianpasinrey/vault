@@ -6,26 +6,34 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
-            $table->string('name');
             $table->string('email')->unique();
-            $table->timestamp('email_verified_at')->nullable();
-            $table->string('password');
+
+            // Material criptografico. Nada de esto permite descifrar por si solo:
+            // el auth_hash es una credencial de acceso y la Vault Key llega
+            // envuelta con una clave que solo existe en el navegador.
+            $table->string('salt');                    // base64, 16 bytes
+            $table->string('kdf_algo')->default('pbkdf2-sha256');
+            $table->unsignedInteger('kdf_iterations')->default(600000);
+            $table->string('auth_hash');               // Argon2id del auth hash recibido
+            $table->text('wrapped_vault_key');
+            $table->string('vault_key_iv');
+
+            $table->unsignedInteger('auto_lock_seconds')->default(300);
+
+            // Bootstrap de un solo uso. No existe registro publico.
+            $table->string('setup_token')->nullable();
+            $table->timestamp('setup_token_expires_at')->nullable();
+
             $table->rememberToken();
             $table->timestamps();
         });
 
-        Schema::create('password_reset_tokens', function (Blueprint $table) {
-            $table->string('email')->primary();
-            $table->string('token');
-            $table->timestamp('created_at')->nullable();
-        });
+        // No hay tabla de reseteo de contrasena: en este sistema no existe
+        // recuperacion posible, por diseno.
 
         Schema::create('sessions', function (Blueprint $table) {
             $table->string('id')->primary();
@@ -37,13 +45,9 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('users');
-        Schema::dropIfExists('password_reset_tokens');
         Schema::dropIfExists('sessions');
     }
 };
