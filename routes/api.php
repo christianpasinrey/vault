@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AccountController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\SetupController;
@@ -22,6 +23,9 @@ Route::middleware('auth')->group(function () {
     Route::delete('/vault/items/{id}', [ItemController::class, 'destroy']);
     Route::post('/vault/items/{id}/restore', [ItemController::class, 'restore']);
     Route::get('/vault/export', [ItemController::class, 'export']);
+
+    Route::post('/account/master-password', [AccountController::class, 'rotateMasterPassword']);
+    Route::put('/account/settings', [AccountController::class, 'settings']);
 
     Route::get('/account/passkeys', [WebauthnController::class, 'index']);
     Route::post('/account/passkeys/challenge', [WebauthnController::class, 'registrationChallenge']);
