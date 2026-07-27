@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Vault — Diseño técnico</title>
+<style>
+  :root{
+    --bg:#0d0f13; --panel:#141821; --panel-2:#1b2029; --line:#262d3a;
+    --fg:#e6e9ef; --muted:#8b95a7; --accent:#7dd3fc; --accent-2:#fbbf24;
+    --danger:#f87171; --ok:#4ade80;
+    --mono:ui-monospace,"Cascadia Code","JetBrains Mono",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font:15px/1.65 "Inter",system-ui,-apple-system,sans-serif;}
+  .wrap{max-width:960px;margin:0 auto;padding:48px 24px 96px}
+  header{border-bottom:1px solid var(--line);padding-bottom:28px;margin-bottom:40px}
+  h1{font-size:2.1rem;margin:0 0 8px;letter-spacing:-.02em}
+  .sub{color:var(--muted);font-size:.95rem}
+  .meta{display:flex;gap:20px;flex-wrap:wrap;margin-top:16px;font-size:.82rem;color:var(--muted)}
+  .meta b{color:var(--fg);font-weight:600}
+  h2{font-size:1.35rem;margin:52px 0 14px;padding-top:10px;letter-spacing:-.01em;
+     border-top:1px solid var(--line)}
+  h2 .n{color:var(--accent);font-variant-numeric:tabular-nums;margin-right:10px}
+  h3{font-size:1.02rem;margin:28px 0 8px;color:var(--accent)}
+  p{margin:12px 0}
+  code{font-family:var(--mono);font-size:.87em;background:var(--panel-2);
+       padding:2px 6px;border-radius:4px;color:var(--accent-2)}
+  pre{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+      padding:16px;overflow-x:auto;font-family:var(--mono);font-size:.84rem;line-height:1.55}
+  pre code{background:none;padding:0;color:var(--fg)}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:.89rem;display:block;overflow-x:auto}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.05em}
+  td code{white-space:nowrap}
+  .box{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);
+       border-radius:6px;padding:14px 18px;margin:20px 0}
+  .box.warn{border-left-color:var(--danger)}
+  .box.ok{border-left-color:var(--ok)}
+  .box h4{margin:0 0 6px;font-size:.85rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+  .box.warn h4{color:var(--danger)}
+  .box.ok h4{color:var(--ok)}
+  ul{padding-left:22px}
+  li{margin:6px 0}
+  .mermaid{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+           padding:20px;margin:20px 0;text-align:center;overflow-x:auto}
+  .chart-wrap{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+              padding:20px;margin:20px 0}
+  .tag{display:inline-block;font-size:.72rem;padding:2px 8px;border-radius:999px;
+       border:1px solid var(--line);color:var(--muted);margin-right:6px}
+  .tag.no{color:var(--danger);border-color:#4a2020}
+  .tag.si{color:var(--ok);border-color:#1e4030}
+  footer{margin-top:64px;padding-top:20px;border-top:1px solid var(--line);
+         color:var(--muted);font-size:.82rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Vault — gestor personal de contraseñas y claves</h1>
+  <div class="sub">Diseño técnico · aplicación web autoalojada, cifrado zero-knowledge, usuario único</div>
+  <div class="meta">
+    <span>Fecha: <b>2026-07-27</b></span>
+    <span>Estado: <b>Diseño aprobado</b></span>
+    <span>Destino: <b>VPS propio, subdominio</b></span>
+    <span>Stack: <b>Laravel 13 + Vue 3.5 + TypeScript</b></span>
+  </div>
+</header>
+
+<h2><span class="n">1</span>Qué es y qué no es</h2>
+
+<p>Una aplicación web privada para guardar contraseñas, claves de API y material sensible
+en texto largo (claves SSH, ficheros <code>.env</code>, certificados PEM), desplegada en un
+subdominio de un VPS propio y usada por una sola persona.</p>
+
+<p>La propiedad que gobierna todo el diseño: <strong>el servidor nunca puede leer lo que
+guarda</strong>. Cifrado y descifrado ocurren exclusivamente en el navegador. La base de
+datos, los backups y la memoria del proceso PHP contienen únicamente blobs opacos. Un
+compromiso total del VPS no expone ni un secreto.</p>
+
+<div class="box warn">
+  <h4>Consecuencia inaceptable si se olvida</h4>
+  <p style="margin:0">No existe recuperación. Si se pierde la master password, los datos
+  son irrecuperables por diseño — no hay reseteo por email, ni pregunta de seguridad, ni
+  puerta trasera de administrador. Es el precio directo de la garantía anterior y se acepta
+  conscientemente.</p>
+</div>
+
+<h3>Decisiones cerradas</h3>
+<table>
+  <tr><th>Decisión</th><th>Elegido</th><th>Motivo</th></tr>
+  <tr><td>Usuarios</td><td>Uno solo</td><td>Elimina registro, roles, invitaciones y compartición</td></tr>
+  <tr><td>Cifrado</td><td>Zero-knowledge en cliente</td><td>Expuesto a internet; el VPS no es de confianza</td></tr>
+  <tr><td>Organización</td><td>Envelope encryption (Vault Key)</td><td>Cambiar la master password no re-cifra todo</td></tr>
+  <tr><td>Derivación</td><td>PBKDF2-SHA256, 600 000 iteraciones</td><td>WebCrypto nativo, sin WASM; migrable a Argon2id</td></tr>
+  <tr><td>Segundo factor</td><td>WebAuthn / passkey obligatoria</td><td>Resistente a phishing y a fuerza bruta</td></tr>
+  <tr><td>Clientes</td><td>Solo web (responsive)</td><td>Una única implementación de la criptografía</td></tr>
+  <tr><td>Backend</td><td>Laravel 13 como API</td><td>Almacén de blobs + autenticación, nada más</td></tr>
+  <tr><td>Frontend</td><td>Vue 3.5 + TS + Tailwind v4 + Pinia</td><td>El cliente lleva el peso; Livewire es inviable aquí</td></tr>
+  <tr><td>Base de datos</td><td>SQLite</td><td>Un fichero: backup trivial, sin demonio expuesto</td></tr>
+</table>
+
+<div class="box">
+  <h4>Por qué Livewire queda descartado</h4>
+  <p style="margin:0">Livewire mantiene el estado del componente en el servidor y lo sincroniza
+  en cada interacción. Con cifrado zero-knowledge, el estado descifrado no puede abandonar el
+  navegador ni en una sola petición. La incompatibilidad es arquitectónica, no de comodidad.</p>
+</div>
+
+<h2><span class="n">2</span>Modelo criptográfico</h2>
+
+<p>El esquema es <em>envelope encryption</em>: la master password no cifra los datos
+directamente, sino una clave intermedia — la <strong>Vault Key</strong> — que es la que cifra
+cada elemento. Así, rotar la master password re-cifra un único valor de 32 bytes en lugar de
+cientos de registros.</p>
+
+<div class="mermaid">
+flowchart TD
+    MP["Master password<br/><i>solo existe en el navegador</i>"]
+    SALT["Salt 128 bits<br/><i>público, guardado en servidor</i>"]
+    MK["Master Key 256 bits"]
+    AH["Auth Hash<br/>HKDF info='auth'"]
+    WK["Wrapping Key<br/>HKDF info='wrap'"]
+    VK["Vault Key 256 bits<br/><i>aleatoria, generada una vez</i>"]
+    WVK["wrapped_vault_key<br/><i>en servidor</i>"]
+    IT["Ítems cifrados<br/>AES-256-GCM, IV por ítem"]
+    SRV["Servidor:<br/>Argon2id(Auth Hash)"]
+
+    MP --> MK
+    SALT --> MK
+    MK -->|HKDF-SHA256| AH
+    MK -->|HKDF-SHA256| WK
+    AH -->|se envía en login| SRV
+    WK -->|AES-256-GCM| WVK
+    VK -->|se envuelve| WVK
+    WVK -->|se desenvuelve al desbloquear| VK
+    VK --> IT
+
+    style MP fill:#3b2a1a,stroke:#fbbf24,color:#e6e9ef
+    style VK fill:#1a2e3b,stroke:#7dd3fc,color:#e6e9ef
+    style SRV fill:#2a1a1a,stroke:#f87171,color:#e6e9ef
+    style WVK fill:#1b2029,stroke:#262d3a,color:#e6e9ef
+    style IT fill:#1b2029,stroke:#262d3a,color:#e6e9ef
+</div>
+
+<h3>Primitivas</h3>
+<table>
+  <tr><th>Función</th><th>Algoritmo</th><th>Parámetros</th></tr>
+  <tr><td>Derivación de clave</td><td>PBKDF2-SHA256</td><td>600 000 iteraciones, salt de 16 bytes, salida 256 bits</td></tr>
+  <tr><td>Separación de subclaves</td><td>HKDF-SHA256</td><td><code>info</code> distinto para auth y wrapping</td></tr>
+  <tr><td>Cifrado simétrico</td><td>AES-256-GCM</td><td>IV aleatorio de 12 bytes por operación, tag de 128 bits</td></tr>
+  <tr><td>Aleatoriedad</td><td><code>crypto.getRandomValues</code></td><td>Nunca <code>Math.random</code>, en ningún punto</td></tr>
+  <tr><td>Verificación server-side</td><td>Argon2id</td><td>Sobre el auth hash recibido, antes de compararlo</td></tr>
+</table>
+
+<div class="box ok">
+  <h4>Por qué HKDF separa auth de cifrado</h4>
+  <p style="margin:0">El auth hash viaja al servidor en cada login. Al derivarlo con HKDF
+  usando un <code>info</code> distinto al de la wrapping key, conocerlo no aporta ninguna
+  ventaja para descifrar: son subclaves computacionalmente independientes de la misma master
+  key. El servidor recibe una credencial de acceso, no una clave criptográfica.</p>
+</div>
+
+<div class="box">
+  <h4>PBKDF2 hoy, Argon2id mañana</h4>
+  <p style="margin:0">Argon2id resiste mejor el ataque con GPU y ASIC, pero requiere cargar un
+  módulo WASM. PBKDF2 a 600 000 iteraciones es nativo en WebCrypto, sin dependencias, y es el
+  valor por defecto de Bitwarden. El algoritmo y las iteraciones se guardan como metadato del
+  usuario (<code>kdf_algo</code>, <code>kdf_iterations</code>), de modo que migrar a Argon2id
+  después es re-derivar y reescribir la Vault Key envuelta — sin tocar los ítems.</p>
+</div>
+
+<h2><span class="n">3</span>Flujos</h2>
+
+<h3>3.1 Bootstrap — una sola vez, iniciado por CLI</h3>
+
+<p>No existe endpoint de registro. La cuenta se crea desde el servidor y se completa desde el
+navegador, porque la parte criptográfica solo puede ocurrir en el cliente.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant CLI as Consola del VPS
+    participant API as Laravel
+    participant BR as Navegador
+
+    CLI->>API: php artisan vault:init --email=...
+    API-->>CLI: token de un solo uso (15 min)
+    BR->>API: GET /setup?token=...
+    API-->>BR: ok, formulario de master password
+    Note over BR: genera salt<br/>deriva master key<br/>genera Vault Key aleatoria<br/>envuelve la Vault Key
+    BR->>API: POST /api/setup {auth_hash, salt, kdf, wrapped_vault_key, iv}
+    API-->>BR: reto de registro WebAuthn
+    BR->>API: credencial de passkey
+    API-->>BR: cuenta lista; token quemado
+    Note over API: la ruta /setup queda muerta<br/>de forma permanente
+</div>
+
+<h3>3.2 Login y desbloqueo</h3>
+
+<div class="mermaid">
+sequenceDiagram
+    participant BR as Navegador
+    participant API as Laravel
+
+    BR->>API: POST /api/auth/prelogin {email}
+    API-->>BR: {salt, kdf_algo, kdf_iterations}
+    Note over BR: deriva master key<br/>calcula auth hash
+    BR->>API: POST /api/auth/login {auth_hash}
+    Note over API: Argon2id + comparación<br/>en tiempo constante
+    API-->>BR: reto WebAuthn
+    BR->>API: POST /api/auth/webauthn/verify {assertion}
+    API-->>BR: sesión + wrapped_vault_key
+    Note over BR: desenvuelve la Vault Key<br/>y la guarda SOLO en memoria
+    BR->>API: GET /api/vault/items
+    API-->>BR: blobs cifrados
+    Note over BR: descifra cada ítem<br/>y puebla la interfaz
+</div>
+
+<h3>3.3 Bloqueo</h3>
+<p>Bloquear significa borrar la Vault Key de memoria y descartar todos los plaintexts. Se
+dispara por inactividad (5 minutos por defecto, configurable), al ocultarse la pestaña más de
+un umbral, y siempre al cerrarla o recargarla. Desbloquear pide solo la master password
+mientras la sesión de servidor siga viva; si ha expirado, se repite el login completo con
+passkey.</p>
+
+<p>Treinta segundos antes del bloqueo automático aparece un aviso, para no perder un
+formulario a medio escribir.</p>
+
+<h2><span class="n">4</span>Modelo de datos</h2>
+
+<p>Cuatro tablas en SQLite. Lo esencial: en <code>items</code> no hay ni un solo campo de
+contenido en claro — ni el nombre, ni la URL, ni el tipo, ni la carpeta.</p>
+
+<h3>users — una única fila</h3>
+<table>
+  <tr><th>Campo</th><th>Tipo</th><th>Notas</th></tr>
+  <tr><td><code>email</code></td><td>string</td><td>Identificador de login</td></tr>
+  <tr><td><code>salt</code></td><td>blob 16 B</td><td>Público; se entrega en prelogin</td></tr>
+  <tr><td><code>kdf_algo</code></td><td>string</td><td><code>pbkdf2-sha256</code> inicialmente</td></tr>
+  <tr><td><code>kdf_iterations</code></td><td>int</td><td>600000</td></tr>
+  <tr><td><code>auth_hash</code></td><td>string</td><td>Argon2id del auth hash recibido</td></tr>
+  <tr><td><code>wrapped_vault_key</code></td><td>blob</td><td>Vault Key cifrada con la wrapping key</td></tr>
+  <tr><td><code>vault_key_iv</code></td><td>blob 12 B</td><td>IV del envoltorio</td></tr>
+  <tr><td><code>auto_lock_seconds</code></td><td>int</td><td>300 por defecto</td></tr>
+</table>
+
+<h3>webauthn_credentials — varias filas</h3>
+<table>
+  <tr><th>Campo</th><th>Tipo</th><th>Notas</th></tr>
+  <tr><td><code>credential_id</code></td><td>string</td><td>Identificador de la passkey</td></tr>
+  <tr><td><code>public_key</code></td><td>text</td><td>Clave pública COSE</td></tr>
+  <tr><td><code>sign_count</code></td><td>int</td><td>Detección de clonado</td></tr>
+  <tr><td><code>name</code></td><td>string</td><td>«Windows Hello», «iPhone»…</td></tr>
+  <tr><td><code>last_used_at</code></td><td>timestamp</td><td>Informativo</td></tr>
+</table>
+
+<h3>items — el contenido, opaco</h3>
+<table>
+  <tr><th>Campo</th><th>Tipo</th><th>Notas</th></tr>
+  <tr><td><code>id</code></td><td>uuid</td><td>Generado en cliente para evitar round-trip</td></tr>
+  <tr><td><code>ciphertext</code></td><td>text</td><td>JSON cifrado con AES-256-GCM, en base64</td></tr>
+  <tr><td><code>iv</code></td><td>blob 12 B</td><td>Único por escritura; nunca reutilizado</td></tr>
+  <tr><td><code>version</code></td><td>int</td><td>Control de concurrencia optimista</td></tr>
+  <tr><td><code>deleted_at</code></td><td>timestamp</td><td>Papelera; purga a los 30 días</td></tr>
+</table>
+
+<div class="box">
+  <h4>Qué filtra el servidor, aun sin poder descifrar</h4>
+  <p style="margin:0">El número de ítems y las marcas de tiempo de creación y modificación.
+  Se acepta de forma consciente: <code>updated_at</code> es necesario para detectar conflictos
+  entre dispositivos, y el recuento no es explotable en un sistema de un solo usuario.</p>
+</div>
+
+<h3>Estructura del plaintext</h3>
+<pre><code>{
+  "type": "login" | "api_key" | "secure_text",
+  "name": "GitHub",
+  "folder": "dev",
+  "favorite": false,
+  "fields": { ... }
+}</code></pre>
+
+<table>
+  <tr><th>type</th><th>fields</th></tr>
+  <tr><td><code>login</code></td><td><code>url</code>, <code>username</code>, <code>password</code>, <code>notes</code></td></tr>
+  <tr><td><code>api_key</code></td><td><code>service</code>, <code>key</code>, <code>secret</code>, <code>environment</code>, <code>expires_at</code>, <code>notes</code></td></tr>
+  <tr><td><code>secure_text</code></td><td><code>content</code> (multilínea), <code>notes</code></td></tr>
+</table>
+
+<p>Añadir un cuarto tipo más adelante no requiere migración: el esquema de base de datos no
+conoce los tipos.</p>
+
+<h2><span class="n">5</span>API</h2>
+
+<table>
+  <tr><th>Método</th><th>Ruta</th><th>Propósito</th></tr>
+  <tr><td>POST</td><td><code>/api/auth/prelogin</code></td><td>Devuelve salt y parámetros KDF</td></tr>
+  <tr><td>POST</td><td><code>/api/auth/login</code></td><td>Verifica el auth hash</td></tr>
+  <tr><td>POST</td><td><code>/api/auth/webauthn/challenge</code></td><td>Reto de la passkey</td></tr>
+  <tr><td>POST</td><td><code>/api/auth/webauthn/verify</code></td><td>Emite sesión y entrega <code>wrapped_vault_key</code></td></tr>
+  <tr><td>POST</td><td><code>/api/auth/logout</code></td><td>Destruye la sesión</td></tr>
+  <tr><td>GET</td><td><code>/api/vault/items</code></td><td>Todos los blobs, incluida la papelera</td></tr>
+  <tr><td>POST</td><td><code>/api/vault/items</code></td><td>Crea un ítem</td></tr>
+  <tr><td>PUT</td><td><code>/api/vault/items/{id}</code></td><td>Actualiza; 409 si la versión no coincide</td></tr>
+  <tr><td>DELETE</td><td><code>/api/vault/items/{id}</code></td><td>Soft delete a papelera</td></tr>
+  <tr><td>POST</td><td><code>/api/vault/items/{id}/restore</code></td><td>Restaura desde papelera</td></tr>
+  <tr><td>GET</td><td><code>/api/vault/export</code></td><td>Blobs cifrados tal cual</td></tr>
+  <tr><td>POST</td><td><code>/api/account/master-password</code></td><td>Rota auth hash y Vault Key envuelta</td></tr>
+  <tr><td>GET/POST/DELETE</td><td><code>/api/account/passkeys</code></td><td>Gestión de passkeys</td></tr>
+</table>
+
+<div class="box warn">
+  <h4>Invariante verificado por test</h4>
+  <p style="margin:0">Ningún endpoint devuelve jamás contenido descifrado. La rotación de
+  master password actualiza <code>auth_hash</code> y <code>wrapped_vault_key</code> dentro de
+  una única transacción: no puede quedar a medias y dejar la bóveda inaccesible.</p>
+</div>
+
+<h2><span class="n">6</span>Frontend</h2>
+
+<p>Tres pantallas: login, bóveda y ajustes. La bóveda descifrada vive en memoria, de modo que
+la búsqueda y el filtrado son locales e instantáneos, sin ninguna petición.</p>
+
+<h3>Organización del código</h3>
+<pre><code>resources/js/
+  crypto/
+    kdf.ts            derivación de master key y subclaves
+    vault-key.ts      envolver / desenvolver la Vault Key
+    item-crypto.ts    cifrar / descifrar ítems
+  stores/
+    vault.ts          bóveda descifrada (Pinia)
+    session.ts        estado de autenticación y bloqueo
+  composables/
+    useAutoLock.ts    inactividad, visibilidad, aviso previo
+    useClipboard.ts   copiado con auto-borrado
+  components/ ...</code></pre>
+
+<p>Los tres módulos de <code>crypto/</code> son funciones puras: entran bytes, salen bytes.
+Sin dependencias del DOM ni de Vue, lo que los hace testeables de forma directa y mantiene la
+parte delicada aislada de la interfaz.</p>
+
+<div class="box warn">
+  <h4>Dónde vive la Vault Key</h4>
+  <p style="margin:0">En una variable de módulo, <strong>fuera del estado reactivo de Pinia</strong>.
+  Nunca en <code>localStorage</code>, <code>sessionStorage</code> ni IndexedDB. Así no aparece
+  en las devtools de Vue, no se serializa y no sobrevive a una recarga.</p>
+</div>
+
+<h3>Comportamiento de la interfaz</h3>
+<ul>
+  <li><b>Copiado con auto-borrado.</b> Un clic copia; a los 25 segundos el portapapeles se
+      limpia solo, con cuenta atrás visible.</li>
+  <li><b>Secretos ocultos por defecto</b>, con botón de revelar. Al bloquear, todo vuelve a ocultarse.</li>
+  <li><b>Generador de contraseñas</b> en el formulario: longitud, símbolos, exclusión de
+      caracteres ambiguos. Sobre <code>crypto.getRandomValues</code>.</li>
+  <li><b><code>autocomplete="off"</code> y campos fuera de un <code>&lt;form&gt;</code> real</b>,
+      para que el navegador no ofrezca guardar en su propio gestor las contraseñas de este.</li>
+  <li><b>Texto largo en monoespaciada</b>, con copiado del bloque completo — para pegar un
+      <code>.env</code> o una clave SSH sin alterar saltos de línea.</li>
+  <li><b>Claves de API marcadas <code>prod</code> resaltadas en rojo</b>, y aviso en lista
+      cuando <code>expires_at</code> se acerca.</li>
+</ul>
+
+<h2><span class="n">7</span>Endurecimiento</h2>
+
+<table>
+  <tr><th>Medida</th><th>Detalle</th></tr>
+  <tr><td>CSP</td><td>Estricta, sin <code>unsafe-inline</code> y sin orígenes externos. Todo el JS y CSS autoalojado; ninguna CDN</td></tr>
+  <tr><td>HSTS</td><td>Activado con <code>preload</code></td></tr>
+  <tr><td>Indexación</td><td><code>X-Robots-Tag: noindex, nofollow</code></td></tr>
+  <tr><td>Cookies</td><td><code>Secure</code>, <code>HttpOnly</code>, <code>SameSite=Strict</code></td></tr>
+  <tr><td>Rate limiting</td><td>Agresivo en prelogin y login, con backoff exponencial</td></tr>
+  <tr><td>Comparaciones</td><td>Tiempo constante en toda verificación de credenciales</td></tr>
+  <tr><td>Errores</td><td><code>APP_DEBUG=false</code> verificado al arrancar; una traza aquí es una filtración</td></tr>
+  <tr><td>Exposición</td><td>nginx sirve solo <code>public/</code>; el resto denegado</td></tr>
+</table>
+
+<h2><span class="n">8</span>Operación</h2>
+
+<p><b>Despliegue.</b> nginx y PHP-FPM en el subdominio, TLS por Let's Encrypt con renovación
+automática.</p>
+
+<p><b>Backups.</b> El fichero SQLite contiene únicamente blobs cifrados, así que un cron que lo
+copie fuera del VPS es seguro por construcción: quien robe el backup no tiene la master
+password. Restaurar consiste en devolver el fichero a su sitio. Conviene verificar la
+restauración al menos una vez, no el día que haga falta.</p>
+
+<div class="box warn">
+  <h4>Requisito operativo antes de considerar el sistema en uso</h4>
+  <p style="margin:0">Registrar <strong>al menos dos passkeys</strong> en dispositivos
+  distintos. Con una sola, perder ese dispositivo cierra el acceso de forma definitiva.</p>
+</div>
+
+<h2><span class="n">9</span>Testing</h2>
+
+<table>
+  <tr><th>Ámbito</th><th>Qué se verifica</th></tr>
+  <tr><td>Criptografía</td><td>Vectores fijos: mismo salt y misma password producen la misma clave</td></tr>
+  <tr><td>Criptografía</td><td>Ida y vuelta: cifrar y descifrar devuelve el original exacto</td></tr>
+  <tr><td>Criptografía</td><td>Integridad: alterar un byte del ciphertext hace fallar AES-GCM</td></tr>
+  <tr><td>Criptografía</td><td>Los IV nunca se repiten entre escrituras</td></tr>
+  <tr><td>Backend</td><td>Login, throttling y bloqueo por intentos</td></tr>
+  <tr><td>Backend</td><td>Conflicto de versión devuelve 409 y no sobrescribe</td></tr>
+  <tr><td>Backend</td><td>Rotación de master password: atómica, o todo o nada</td></tr>
+  <tr><td>Backend</td><td><b>Ningún endpoint devuelve plaintext</b>, en ninguna respuesta</td></tr>
+  <tr><td>E2E</td><td>Bootstrap completo, login, alta de ítem, bloqueo y desbloqueo</td></tr>
+</table>
+
+<h2><span class="n">10</span>Alcance</h2>
+
+<p><span class="tag si">v1</span> Logins web · claves de API · texto largo · generador ·
+papelera · export/import · passkeys · auto-lock</p>
+
+<p><span class="tag no">fuera</span> Compartición · multiusuario · TOTP · adjuntos ·
+historial de contraseñas · extensión de navegador · apps móviles nativas · CLI</p>
+
+<div class="chart-wrap">
+  <canvas id="effort" height="150"></canvas>
+</div>
+
+<h2><span class="n">11</span>Riesgos</h2>
+
+<table>
+  <tr><th>Riesgo</th><th>Mitigación</th></tr>
+  <tr><td>Pérdida de la master password</td><td>Ninguna posible. Debe custodiarse fuera del sistema</td></tr>
+  <tr><td>Pérdida del único dispositivo con passkey</td><td>Registrar dos o más desde el primer día</td></tr>
+  <tr><td>XSS en el cliente expone la Vault Key</td><td>CSP estricta, cero HTML sin sanear, sin dependencias JS innecesarias</td></tr>
+  <tr><td>Error criptográfico propio</td><td>Primitivas estándar de WebCrypto, sin invención; tests con vectores fijos</td></tr>
+  <tr><td>Corrupción del fichero SQLite</td><td>Backups automáticos con restauración verificada</td></tr>
+  <tr><td>PBKDF2 envejece</td><td>Parámetros KDF versionados en base de datos; migración a Argon2id sin tocar ítems</td></tr>
+</table>
+
+<footer>
+  Vault · diseño técnico · 2026-07-27 · Documento vivo: se actualiza si el diseño cambia
+  durante la implementación.
+</footer>
+
+</div>
+
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/chart.umd.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      background: '#141821',
+      primaryColor: '#1b2029',
+      primaryTextColor: '#e6e9ef',
+      primaryBorderColor: '#262d3a',
+      lineColor: '#8b95a7',
+      secondaryColor: '#1a2e3b',
+      tertiaryColor: '#0d0f13',
+      fontSize: '14px'
+    }
+  });
+
+  new Chart(document.getElementById('effort'), {
+    type: 'bar',
+    data: {
+      labels: ['Andamiaje\ny backend', 'Criptografía\ncliente', 'Auth +\nWebAuthn',
+               'Interfaz\nde bóveda', 'Ajustes,\nexport, papelera', 'Endurecimiento\ny despliegue'],
+      datasets: [{
+        label: 'Peso relativo del esfuerzo',
+        data: [10, 20, 22, 28, 10, 10],
+        backgroundColor: ['#334155','#7dd3fc','#7dd3fc','#fbbf24','#334155','#4ade80'],
+        borderRadius: 4
+      }]
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+        title: {
+          display: true,
+          text: 'Distribución estimada del esfuerzo por fase (%)',
+          color: '#8b95a7',
+          font: { size: 13, weight: '600' },
+          padding: { bottom: 16 }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#8b95a7', font: { size: 11 } }, grid: { display: false } },
+        y: { ticks: { color: '#8b95a7' }, grid: { color: '#262d3a' }, beginAtZero: true }
+      }
+    }
+  });
+</script>
+</body>
+</html>
