@@ -8,45 +8,48 @@ use Illuminate\Support\Str;
 
 class VaultInit extends Command
 {
-    protected $signature = 'vault:init {--email= : Correo con el que iniciaras sesion}';
+    protected $signature = 'vault:init {--email= : Email address you will sign in with}';
 
-    protected $description = 'Crea la unica cuenta del sistema y emite un enlace de configuracion de un solo uso';
+    protected $description = 'Create the single account of this system and issue a one-time setup link';
+
+    /** Attempts before giving up when the email is typed by hand. */
+    private const ATTEMPTS = 3;
 
     public function handle(): int
     {
-        $email = $this->option('email') ?: $this->ask('Correo');
+        $email = $this->option('email') ?: $this->askForEmail();
 
-        if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $this->error('El correo no es valido.');
-
-            return self::FAILURE;
-        }
-
-        $existente = User::first();
-
-        if ($existente && $existente->email !== $email) {
-            $this->error("Ya existe una cuenta ({$existente->email}). Este sistema es de usuario unico.");
+        if ($email === null || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $this->error('That email address is not valid.');
 
             return self::FAILURE;
         }
 
-        if ($existente && $existente->auth_hash !== '') {
-            $this->error('La cuenta ya esta configurada. Reconfigurarla exigiria destruir la boveda.');
+        $existing = User::first();
+
+        if ($existing && $existing->email !== $email) {
+            $this->error("An account already exists ({$existing->email}). This system is single-user.");
+
+            return self::FAILURE;
+        }
+
+        if ($existing && $existing->auth_hash !== '') {
+            $this->error('The account is already set up. Reconfiguring it would mean destroying the vault.');
 
             return self::FAILURE;
         }
 
         $token = Str::random(64);
 
-        $usuario = $existente ?? new User;
-        $usuario->fill([
+        $user = $existing ?? new User;
+        $user->fill([
             'email' => $email,
             'salt' => '',
             'auth_hash' => '',
             'wrapped_vault_key' => '',
             'vault_key_iv' => '',
-            // Se guarda el hash, no el token: quien lea la base de datos no
-            // puede reutilizar el enlace de configuracion.
+            // Only the SHA-256 is stored, never the token itself: a database
+            // dump does not let anyone reuse the setup link.
             'setup_token' => hash('sha256', $token),
             'setup_token_expires_at' => now()->addMinutes(15),
         ])->save();
@@ -54,13 +57,37 @@ class VaultInit extends Command
         $url = rtrim(config('app.url'), '/')."/setup?token={$token}";
 
         $this->newLine();
-        $this->info('Cuenta preparada. Abre este enlace en el navegador durante los proximos 15 minutos:');
+        $this->info('Account ready. Open this link in your browser within the next 15 minutes:');
         $this->newLine();
         $this->line($url);
         $this->newLine();
-        $this->warn('La master password que elijas no se puede recuperar. Guardala fuera de este sistema.');
-        $this->warn('Registra al menos dos passkeys antes de confiarle nada importante.');
+        $this->warn('The master password you choose cannot be recovered. Store it outside this system.');
+        $this->warn('Register at least two passkeys before trusting it with anything important.');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Ask for the email on the console until it is valid.
+     *
+     * This system is single-user and the account cannot be renamed without
+     * destroying the vault, so a typo is expensive. Returns null once the
+     * attempts run out.
+     */
+    private function askForEmail(): ?string
+    {
+        for ($attempt = 1; $attempt <= self::ATTEMPTS; $attempt++) {
+            $email = trim((string) $this->ask('Email address you will sign in with'));
+
+            if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                return $email;
+            }
+
+            if ($attempt < self::ATTEMPTS) {
+                $this->error('That email address is not valid.');
+            }
+        }
+
+        return null;
     }
 }

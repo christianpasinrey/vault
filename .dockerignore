@@ -1,0 +1,34 @@
+# None of this may ever end up inside an image.
+.env
+.env.*
+!.env.example
+database/*.sqlite
+database/*.sqlite-shm
+database/*.sqlite-wal
+database/*.db
+storage/backups
+storage/*.key
+
+# Rebuilt inside the image.
+node_modules
+vendor
+public/build
+public/hot
+public/storage
+bootstrap/cache/*.php
+storage/framework/cache/data
+storage/framework/sessions
+storage/framework/views
+storage/logs
+
+# Workspace noise.
+.git
+.github
+.idea
+.vscode
+.phpunit.cache
+.phpunit.result.cache
+compose.yaml
+docs
+tests
+*.md

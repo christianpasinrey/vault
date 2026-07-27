@@ -1,0 +1,32 @@
+# Vault production server.
+#
+# SERVER_NAME is injected by compose. If it is a real domain, Caddy obtains and
+# renews the certificate on its own. That is not a convenience: WebAuthn only
+# works in a secure context, so without HTTPS there is no second factor.
+
+{
+	frankenphp
+	auto_https on
+	admin off
+}
+
+{$SERVER_NAME} {
+	root /app/public
+	encode zstd br gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Cross-Origin-Opener-Policy "same-origin"
+		-Server
+		-X-Powered-By
+	}
+
+	# Neither the vault file nor the configuration is ever served.
+	@forbidden path /.env* /database/* /storage/* /.git/*
+	respond @forbidden 404
+
+	php_server
+}
