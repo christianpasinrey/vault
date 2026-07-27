@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { generateVaultKey, wrapVaultKey, unwrapVaultKey } from './vault-key';
 import { deriveMasterKey, deriveWrappingKey, generateSalt } from './kdf';
+import type { Bytes } from './bytes';
 
 const hex = (b: Uint8Array) => Array.from(b).map((x) => x.toString(16).padStart(2, '0')).join('');
 
-async function wrappingKeyDe(password: string, salt: Uint8Array) {
+async function wrappingKeyDe(password: string, salt: Bytes) {
     return deriveWrappingKey(await deriveMasterKey(password, { algo: 'pbkdf2-sha256', iterations: 1000, salt }));
 }
 

@@ -1,3 +1,5 @@
+import type { Bytes } from './bytes';
+
 /**
  * Derivacion de claves a partir de la master password.
  *
@@ -17,14 +19,14 @@ const enc = new TextEncoder();
 export interface KdfParams {
     algo: 'pbkdf2-sha256';
     iterations: number;
-    salt: Uint8Array;
+    salt: Bytes;
 }
 
-export function generateSalt(): Uint8Array {
+export function generateSalt(): Bytes {
     return crypto.getRandomValues(new Uint8Array(SALT_BYTES));
 }
 
-export async function deriveMasterKey(password: string, params: KdfParams): Promise<Uint8Array> {
+export async function deriveMasterKey(password: string, params: KdfParams): Promise<Bytes> {
     const base = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
 
     const bits = await crypto.subtle.deriveBits(
@@ -36,7 +38,7 @@ export async function deriveMasterKey(password: string, params: KdfParams): Prom
     return new Uint8Array(bits);
 }
 
-async function derivarSubclave(masterKey: Uint8Array, info: string): Promise<Uint8Array> {
+async function derivarSubclave(masterKey: Bytes, info: string): Promise<Bytes> {
     const base = await crypto.subtle.importKey('raw', masterKey, 'HKDF', false, ['deriveBits']);
 
     const bits = await crypto.subtle.deriveBits(
@@ -49,11 +51,11 @@ async function derivarSubclave(masterKey: Uint8Array, info: string): Promise<Uin
 }
 
 /** Credencial que se envia al servidor. Inutil para descifrar. */
-export function deriveAuthHash(masterKey: Uint8Array): Promise<Uint8Array> {
+export function deriveAuthHash(masterKey: Bytes): Promise<Bytes> {
     return derivarSubclave(masterKey, INFO_AUTH);
 }
 
 /** Clave que envuelve y desenvuelve la Vault Key. Jamas abandona el navegador. */
-export function deriveWrappingKey(masterKey: Uint8Array): Promise<Uint8Array> {
+export function deriveWrappingKey(masterKey: Bytes): Promise<Bytes> {
     return derivarSubclave(masterKey, INFO_WRAP);
 }
