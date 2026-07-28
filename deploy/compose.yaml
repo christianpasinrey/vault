@@ -35,6 +35,24 @@ services:
             - caddy-data:/data
             - caddy-config:/config
 
+    # Empties the trash on schedule. Without it, deleted items stay recoverable
+    # for ever, which quietly turns the trash into a second copy of the vault.
+    scheduler:
+        image: vault
+        restart: unless-stopped
+        depends_on:
+            - vault
+        command: ['php', 'artisan', 'schedule:work']
+        environment:
+            VAULT_SIDECAR: '1'
+            APP_URL: https://${VAULT_DOMAIN}
+            APP_NAME: ${VAULT_NAME:-Vault}
+            APP_ENV: production
+            APP_DEBUG: 'false'
+            LOG_LEVEL: warning
+        volumes:
+            - vault-data:/vault-data
+
 volumes:
     vault-data:
     caddy-data:

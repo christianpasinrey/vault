@@ -31,6 +31,13 @@ if [ ! -f "$DB_DATABASE" ]; then
     echo "vault: vault created at $DB_DATABASE"
 fi
 
+# The scheduler container shares this volume and this entrypoint, but must not
+# migrate or rebuild caches: the web container owns that, and two processes
+# doing it at once on the same SQLite file is asking for trouble.
+if [ -n "${VAULT_SIDECAR:-}" ]; then
+    exec "$@"
+fi
+
 php artisan migrate --force
 
 # --- Boot cache --------------------------------------------------------------

@@ -81,6 +81,21 @@ git pull && docker compose up -d --build
 
 ---
 
+## Scheduled work
+
+`docker compose up` starts a second container running `schedule:work`. It has
+one job: `vault:purge`, which destroys for good the items that have been in the
+trash for more than 30 days. Without it the trash never empties and becomes a
+second copy of everything you deleted.
+
+To run it by hand:
+
+```bash
+docker compose exec vault php artisan vault:purge
+```
+
+---
+
 ## Backups
 
 The only thing to back up is the `vault-data` volume. Its contents are already
@@ -88,13 +103,16 @@ encrypted: whoever gets hold of the file does not have the master password and
 cannot read a thing.
 
 ```bash
-docker compose exec vault sh -c \
-  "sqlite3 /vault-data/database.sqlite \".backup '/vault-data/backup.sqlite'\"" \
-  && docker compose cp vault:/vault-data/backup.sqlite ./vault-$(date +%F).sqlite
+deploy/backup.sh
 ```
 
-Use sqlite3's `.backup`, not `cp`: copying the file while the application is
-running can produce a corrupt snapshot.
+The script snapshots the database with sqlite3's `.backup` (never `cp`, which
+can capture a half-written page), copies it out along with the `app_key`, and
+deletes copies older than 30 days. From cron:
+
+```cron
+0 4 * * * /var/www/vault/deploy/backup.sh >> /var/log/vault-backup.log 2>&1
+```
 
 Keep `/vault-data/app_key` too. Without it sessions are invalidated — no data is
 lost, but everyone has to sign in again.
