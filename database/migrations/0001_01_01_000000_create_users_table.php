@@ -6,26 +6,33 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
-            $table->string('name');
             $table->string('email')->unique();
-            $table->timestamp('email_verified_at')->nullable();
-            $table->string('password');
+
+            // Cryptographic material. None of this decrypts anything on its own:
+            // auth_hash is an access credential, and the Vault Key arrives
+            // wrapped with a key that only ever exists in the browser.
+            $table->string('salt');                    // base64, 16 bytes
+            $table->string('kdf_algo')->default('pbkdf2-sha256');
+            $table->unsignedInteger('kdf_iterations')->default(600000);
+            $table->string('auth_hash');               // Argon2id of the received auth hash
+            $table->text('wrapped_vault_key');
+            $table->string('vault_key_iv');
+
+            $table->unsignedInteger('auto_lock_seconds')->default(300);
+
+            // Single-use bootstrap. There is no public sign-up.
+            $table->string('setup_token')->nullable();
+            $table->timestamp('setup_token_expires_at')->nullable();
+
             $table->rememberToken();
             $table->timestamps();
         });
 
-        Schema::create('password_reset_tokens', function (Blueprint $table) {
-            $table->string('email')->primary();
-            $table->string('token');
-            $table->timestamp('created_at')->nullable();
-        });
+        // No password reset table: by design, this system offers no recovery.
 
         Schema::create('sessions', function (Blueprint $table) {
             $table->string('id')->primary();
@@ -37,13 +44,9 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('users');
-        Schema::dropIfExists('password_reset_tokens');
         Schema::dropIfExists('sessions');
     }
 };

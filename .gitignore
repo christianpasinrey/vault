@@ -1,4 +1,4 @@
-# --- Vault: nunca versionar la bóveda ni material sensible ---
+# --- Vault: never commit the vault itself or any sensitive material ---
 /database/*.sqlite
 /database/*.sqlite-shm
 /database/*.sqlite-wal

@@ -1,0 +1,32 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('items', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+
+            // Everything lives in here, encrypted: name, folder, type and fields.
+            // The server understands nothing of what it stores.
+            $table->longText('ciphertext');
+            $table->string('iv');
+
+            // Optimistic concurrency across devices.
+            $table->unsignedInteger('version')->default(1);
+
+            $table->softDeletes();
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('items');
+    }
+};

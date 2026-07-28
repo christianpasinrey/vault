@@ -1,0 +1,59 @@
+# Vault PRODUCTION deployment.
+#
+#   cd deploy && cp .env.example .env && $EDITOR .env
+#   docker compose up -d --build
+#   docker compose exec vault php artisan vault:init
+#
+# For local development use the `compose.yaml` at the repository root (Sail).
+
+services:
+    vault:
+        build:
+            context: ..
+            dockerfile: deploy/Dockerfile
+        image: vault
+        restart: unless-stopped
+        ports:
+            - '80:80'
+            - '443:443'
+            - '443:443/udp'
+        environment:
+            # A real domain: Caddy requests the TLS certificate from Let's Encrypt.
+            # WebAuthn does not work without HTTPS, so this is not optional.
+            SERVER_NAME: ${VAULT_DOMAIN:?set VAULT_DOMAIN in deploy/.env}
+            APP_URL: https://${VAULT_DOMAIN}
+            APP_NAME: ${VAULT_NAME:-Vault}
+            APP_ENV: production
+            APP_DEBUG: 'false'
+            LOG_LEVEL: warning
+            SESSION_ENCRYPT: 'true'
+            SESSION_SECURE_COOKIE: 'true'
+        volumes:
+            # The encrypted vault and the APP_KEY. This is the only thing to back up.
+            - vault-data:/vault-data
+            # TLS certificates, so they are not requested again on every restart.
+            - caddy-data:/data
+            - caddy-config:/config
+
+    # Empties the trash on schedule. Without it, deleted items stay recoverable
+    # for ever, which quietly turns the trash into a second copy of the vault.
+    scheduler:
+        image: vault
+        restart: unless-stopped
+        depends_on:
+            - vault
+        command: ['php', 'artisan', 'schedule:work']
+        environment:
+            VAULT_SIDECAR: '1'
+            APP_URL: https://${VAULT_DOMAIN}
+            APP_NAME: ${VAULT_NAME:-Vault}
+            APP_ENV: production
+            APP_DEBUG: 'false'
+            LOG_LEVEL: warning
+        volumes:
+            - vault-data:/vault-data
+
+volumes:
+    vault-data:
+    caddy-data:
+    caddy-config:
