@@ -12,6 +12,8 @@ withDefaults(
         autocomplete?: string;
         autofocus?: boolean;
         placeholder?: string;
+        /** Id of a <datalist> offering existing values, for fields like folders. */
+        list?: string;
     }>(),
     { type: 'text', mono: false, autocomplete: 'off' },
 );
@@ -31,6 +33,7 @@ const id = useId();
             :autocomplete="autocomplete"
             :autofocus="autofocus"
             :placeholder="placeholder"
+            :list="list"
             :aria-invalid="error !== undefined && error !== ''"
             :aria-describedby="hint || error ? `${id}-note` : undefined"
             spellcheck="false"

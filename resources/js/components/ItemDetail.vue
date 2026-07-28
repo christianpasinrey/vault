@@ -10,7 +10,7 @@ import Notice from '@/components/ui/Notice.vue';
 
 const props = defineProps<{ item: DecryptedItem }>();
 
-const emit = defineEmits<{ remove: [] }>();
+const emit = defineEmits<{ edit: []; remove: [] }>();
 
 const { copy, copied, secondsLeft, error } = useClipboard();
 
@@ -43,6 +43,7 @@ const isProduction = computed(() => (props.item.fields.environment ?? '').trim()
             </div>
 
             <div class="flex shrink-0 gap-2">
+                <AppButton @click="emit('edit')">Edit</AppButton>
                 <AppButton variant="danger" @click="emit('remove')">Move to trash</AppButton>
             </div>
         </header>
