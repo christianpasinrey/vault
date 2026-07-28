@@ -90,15 +90,10 @@ export const useSessionStore = defineStore('session', () => {
 
             await unwrapInto(masterKey, verified.wrapped_vault_key, verified.vault_key_iv);
 
-            account.value = {
-                email: address,
-                salt: prelogin.salt,
-                kdf_algo: prelogin.kdf_algo,
-                kdf_iterations: prelogin.kdf_iterations,
-                wrapped_vault_key: verified.wrapped_vault_key,
-                vault_key_iv: verified.vault_key_iv,
-                auto_lock_seconds: verified.auto_lock_seconds,
-            };
+            // The account record comes from the server rather than being pieced
+            // together here, so an unlock later works off exactly what the server
+            // holds today.
+            account.value = await api.get<AccountInfo>('/api/account/me');
             state.value = 'unlocked';
         } finally {
             masterKey.fill(0);
@@ -127,8 +122,8 @@ export const useSessionStore = defineStore('session', () => {
         }
     }
 
-    /** First-run setup: everything is generated here, in the browser. */
-    async function completeSetup(address: string, token: string, password: string): Promise<void> {
+    /** First-run setup: every piece of key material is generated here, in the browser. */
+    async function completeSetup(token: string, password: string): Promise<void> {
         const salt = generateSalt();
         const masterKey = await deriveMasterKey(password, {
             algo: 'pbkdf2-sha256',
@@ -157,15 +152,7 @@ export const useSessionStore = defineStore('session', () => {
             // The server left this session authenticated so the first passkey can
             // be enrolled straight away.
             setVaultKey(vaultKey);
-            account.value = {
-                email: address,
-                salt: bytesToBase64(salt),
-                kdf_algo: 'pbkdf2-sha256',
-                kdf_iterations: DEFAULT_ITERATIONS,
-                wrapped_vault_key: wrapped.ciphertext,
-                vault_key_iv: wrapped.iv,
-                auto_lock_seconds: 900,
-            };
+            account.value = await api.get<AccountInfo>('/api/account/me');
             state.value = 'unlocked';
         } finally {
             masterKey.fill(0);
