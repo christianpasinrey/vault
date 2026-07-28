@@ -4,8 +4,8 @@ import vue from '@vitejs/plugin-vue';
 import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath, URL } from 'node:url';
 
-// Sin fuentes remotas ni ninguna otra dependencia externa: la CSP de esta
-// aplicacion no permite mas origen que 'self'.
+// No remote fonts and no other external dependency: this application's CSP
+// allows no origin other than 'self'.
 export default defineConfig({
     plugins: [
         laravel({

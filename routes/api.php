@@ -24,6 +24,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/vault/items/{id}/restore', [ItemController::class, 'restore']);
     Route::get('/vault/export', [ItemController::class, 'export']);
 
+    Route::get('/account/me', [AccountController::class, 'me']);
     Route::post('/account/master-password', [AccountController::class, 'rotateMasterPassword']);
     Route::put('/account/settings', [AccountController::class, 'settings']);
 

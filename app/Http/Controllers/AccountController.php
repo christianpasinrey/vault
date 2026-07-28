@@ -12,6 +12,27 @@ use Illuminate\Validation\ValidationException;
 
 class AccountController extends Controller
 {
+    /**
+     * Everything the client needs to rebuild the wrapping key and unwrap the
+     * Vault Key after a page reload. The wrapped key is opaque without the
+     * master password, so handing it to an already authenticated session adds no
+     * exposure the login did not already have.
+     */
+    public function me(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        return response()->json([
+            'email' => $user->email,
+            'salt' => $user->salt,
+            'kdf_algo' => $user->kdf_algo,
+            'kdf_iterations' => $user->kdf_iterations,
+            'wrapped_vault_key' => $user->wrapped_vault_key,
+            'vault_key_iv' => $user->vault_key_iv,
+            'auto_lock_seconds' => $user->auto_lock_seconds,
+        ]);
+    }
+
     public function rotateMasterPassword(Request $request): Response
     {
         // Validate the full payload before touching anything: a partial write
