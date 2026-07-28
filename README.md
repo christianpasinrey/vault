@@ -59,7 +59,7 @@ flowchart TD
     WK["Wrapping key<br/>HKDF info: vault:wrap:v1"]
     VK["Vault Key<br/>256 random bits"]
     ITEMS["Your items<br/>AES-256-GCM"]
-    SRV[("Server<br/>argon2id(auth hash)<br/>wrapped Vault Key<br/>opaque ciphertext")]
+    SRV[("Server<br/>argon2id of the auth hash<br/>wrapped Vault Key<br/>opaque ciphertext")]
 
     MP --> MK
     MK --> AH
