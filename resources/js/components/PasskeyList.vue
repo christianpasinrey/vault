@@ -60,10 +60,18 @@ function defaultName(): string {
 }
 
 function message(failure: unknown): string {
-    // A cancelled or unsupported ceremony throws from the browser, not the API.
-    if (failure instanceof Error && failure.name === 'NotAllowedError') return 'The passkey prompt was dismissed.';
+    // A cancelled or rejected ceremony throws from the browser, not the API, and
+    // its wording is aimed at developers rather than at whoever is standing here.
+    if (failure instanceof Error) {
+        if (failure.name === 'NotAllowedError') return 'The passkey prompt was dismissed.';
+        if (failure.name === 'InvalidStateError') {
+            return 'This device already holds a passkey for the vault. Use a different one for the second.';
+        }
 
-    return failure instanceof Error ? failure.message : 'The passkey could not be registered.';
+        return failure.message;
+    }
+
+    return 'The passkey could not be registered.';
 }
 
 function formatDate(value: string | null): string {

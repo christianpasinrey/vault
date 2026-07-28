@@ -53,6 +53,25 @@ class ItemTest extends TestCase
         $this->assertSame(1, Item::count());
     }
 
+    /**
+     * The client keeps the created item in its list without reloading, so a
+     * response missing a column leaves it holding a half-built record.
+     */
+    public function test_the_created_item_comes_back_with_every_field_the_client_needs(): void
+    {
+        $response = $this->actingAs($this->user)->postJson('/api/vault/items', [
+            'id' => (string) Str::uuid(),
+            'ciphertext' => base64_encode(random_bytes(64)),
+            'iv' => base64_encode(random_bytes(12)),
+        ])->assertCreated();
+
+        foreach (['id', 'ciphertext', 'iv', 'version', 'deleted_at', 'created_at', 'updated_at'] as $field) {
+            $response->assertJsonStructure([$field]);
+        }
+
+        $response->assertJsonPath('deleted_at', null)->assertJsonPath('version', 1);
+    }
+
     public function test_lists_the_items_of_the_user_including_the_trash(): void
     {
         $this->makeItem();

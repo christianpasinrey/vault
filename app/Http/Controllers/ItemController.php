@@ -25,7 +25,9 @@ class ItemController extends Controller
             'version' => 1,
         ]);
 
-        return response()->json($item, 201);
+        // Straight from the database, so the response carries every column the
+        // client stores — including the ones the insert never touched.
+        return response()->json($item->fresh(), 201);
     }
 
     public function update(ItemRequest $request, string $id): JsonResponse

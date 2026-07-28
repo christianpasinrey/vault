@@ -41,7 +41,7 @@ const shown = computed(() => (!props.secret || revealed.value ? props.value : ''
             </span>
 
             <pre
-                v-else-if="block"
+                v-else-if="block && shown !== ''"
                 class="max-h-64 flex-1 overflow-auto rounded-sm bg-ink px-3 py-2 font-mono text-sm break-words whitespace-pre-wrap text-paper"
             >{{ shown }}</pre>
 
