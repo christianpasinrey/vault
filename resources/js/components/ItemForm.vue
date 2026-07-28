@@ -32,8 +32,6 @@ const fields = computed(() =>
     })),
 );
 
-const generatable = computed(() => FIELDS_BY_TYPE[draft.type].includes('password'));
-
 function fieldValue(name: string): string {
     return draft.fields[name] ?? '';
 }
@@ -147,9 +145,14 @@ function save(): void {
                         {{ showGenerator ? 'Close' : 'Generate' }}
                     </AppButton>
                 </div>
-            </template>
 
-            <PasswordGenerator v-if="generatable && showGenerator" @use="useGenerated" />
+                <!-- Right under the field it fills: opening it at the foot of the
+                     form would put it off-screen, away from the button. -->
+                <PasswordGenerator
+                    v-if="field.name === 'password' && showGenerator"
+                    @use="useGenerated"
+                />
+            </template>
         </section>
     </div>
 </template>
