@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\SetupRequest;
 use App\Models\User;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 
 class SetupController extends Controller
@@ -35,6 +36,14 @@ class SetupController extends Controller
             'setup_token' => null,
             'setup_token_expires_at' => null,
         ]);
+
+        // The account has no passkey yet, and registering one requires an
+        // authenticated session — while signing in requires a passkey. The
+        // one-time token, delivered by `vault:init` on the server console, is
+        // what breaks that tie: it authenticates this session exactly once so
+        // the first passkey can be enrolled.
+        Auth::login($user);
+        $request->session()->regenerate();
 
         return response()->noContent();
     }

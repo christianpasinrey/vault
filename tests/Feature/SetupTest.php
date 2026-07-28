@@ -87,4 +87,25 @@ class SetupTest extends TestCase
         $this->postJson('/api/setup', $this->payload(['salt' => 'not base64 !!']))
             ->assertStatus(422);
     }
+
+    /**
+     * Without this the vault can never be opened: registering a passkey needs an
+     * authenticated session, and logging in needs a passkey that does not exist
+     * yet. The one-time token is what breaks the tie.
+     */
+    public function test_leaves_the_session_authenticated_so_the_first_passkey_can_be_registered(): void
+    {
+        $this->postJson('/api/setup', $this->payload())->assertNoContent();
+
+        $this->assertAuthenticatedAs(User::first());
+        $this->getJson('/api/account/passkeys')->assertOk();
+    }
+
+    public function test_a_failed_setup_does_not_authenticate_anyone(): void
+    {
+        $this->postJson('/api/setup', $this->payload(['token' => 'not-the-token']))
+            ->assertForbidden();
+
+        $this->assertGuest();
+    }
 }
