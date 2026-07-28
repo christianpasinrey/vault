@@ -6,7 +6,7 @@ import { deriveAuthHash, deriveMasterKey, deriveWrappingKey, generateSalt, DEFAU
 import { generateVaultKey, wrapVaultKey, unwrapVaultKey } from '@/crypto/vault-key';
 import { base64ToBytes, bytesToBase64 } from '@/crypto/base64';
 import type { Bytes } from '@/crypto/bytes';
-import { setVaultKey, clearVaultKey, hasVaultKey } from './vault-key-holder';
+import { setVaultKey, getVaultKey, clearVaultKey, hasVaultKey } from './vault-key-holder';
 
 /**
  * - `anonymous`     no session on the server.
@@ -159,6 +159,63 @@ export const useSessionStore = defineStore('session', () => {
         }
     }
 
+    /**
+     * Changes the master password without touching a single item.
+     *
+     * The Vault Key does not change: it is simply re-wrapped with a wrapping key
+     * derived from the new password. That is what makes this cheap and atomic
+     * instead of a re-encryption of the whole vault.
+     */
+    async function rotateMasterPassword(currentPassword: string, newPassword: string): Promise<void> {
+        if (account.value === null) throw new Error('There is no session.');
+
+        const currentMasterKey = await deriveMasterKey(currentPassword, {
+            algo: account.value.kdf_algo,
+            iterations: account.value.kdf_iterations,
+            salt: base64ToBytes(account.value.salt),
+        });
+
+        const salt = generateSalt();
+        const newMasterKey = await deriveMasterKey(newPassword, {
+            algo: 'pbkdf2-sha256',
+            iterations: DEFAULT_ITERATIONS,
+            salt,
+        });
+
+        try {
+            const currentAuthHash = await deriveAuthHash(currentMasterKey);
+            const newAuthHash = await deriveAuthHash(newMasterKey);
+            const newWrappingKey = await deriveWrappingKey(newMasterKey);
+
+            // The Vault Key is already in memory: there is nothing to unwrap.
+            const wrapped = await wrapVaultKey(newWrappingKey, getVaultKey());
+            newWrappingKey.fill(0);
+
+            await api.post('/api/account/master-password', {
+                current_auth_hash: bytesToBase64(currentAuthHash),
+                salt: bytesToBase64(salt),
+                kdf_algo: 'pbkdf2-sha256',
+                kdf_iterations: DEFAULT_ITERATIONS,
+                auth_hash: bytesToBase64(newAuthHash),
+                wrapped_vault_key: wrapped.ciphertext,
+                vault_key_iv: wrapped.iv,
+            });
+
+            currentAuthHash.fill(0);
+            newAuthHash.fill(0);
+
+            replaceKeyMaterial({
+                salt: bytesToBase64(salt),
+                kdf_iterations: DEFAULT_ITERATIONS,
+                wrapped_vault_key: wrapped.ciphertext,
+                vault_key_iv: wrapped.iv,
+            });
+        } finally {
+            currentMasterKey.fill(0);
+            newMasterKey.fill(0);
+        }
+    }
+
     /** Enrolls a passkey on the current account. */
     async function registerPasskey(name: string): Promise<void> {
         const options = await api.post<Record<string, unknown>>('/api/account/passkeys/challenge');
@@ -218,6 +275,7 @@ export const useSessionStore = defineStore('session', () => {
         login,
         unlock,
         completeSetup,
+        rotateMasterPassword,
         registerPasskey,
         lock,
         logout,
